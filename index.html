@@ -33,6 +33,7 @@
   .tile{text-align:left;background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;width:100%;}
   .tileIc{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;}
   .pcard{text-align:left;width:100%;background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:10px;align-items:center;}
+  .tcard{background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:14px;padding:14px;margin-bottom:10px;}
   .fchip{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(31,28,23,.14);color:#5b5446;background:#fff;}
   .fchip.on{background:#1f3d2c;color:#faf6ec;border-color:#1f3d2c;}
   .q{width:100%;padding:11px 14px;border-radius:11px;border:1px solid rgba(31,28,23,.14);font-size:14px;outline:none;background:#fff;}
@@ -185,11 +186,23 @@
   }
   function parkById(id){ for (var i=0;i<PARKS.length;i++){ if (PARKS[i].id===id) return PARKS[i]; } return null; }
   function fmtDate(d){ return d.toLocaleDateString(undefined,{ weekday:"short", month:"short", day:"numeric" }); }
+  function nightsBetween(a,b){ if(!a||!b) return 0; return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
+  function todayLocalStr(){ var d=new Date(); function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
+  function bookingInfo(p, dateInStr){
+    var net = NETWORKS[p.network];
+    if (!net || !net.window || !dateInStr) return null;
+    var arrival = new Date(dateInStr+"T00:00:00");
+    var openDate = new Date(arrival.getTime() - net.window*86400000);
+    var openIn = Math.ceil((openDate - new Date(new Date().toDateString()))/86400000);
+    return { net:net, openDate:openDate, openIn:openIn, open:openIn<=0 };
+  }
+  function ensureTripIds(){ var ch=false; state.trips.forEach(function(t,i){ if(!t.id){ t.id=Date.now()+i; ch=true; } }); if(ch) persist(); }
+  function tripById(id){ for(var i=0;i<state.trips.length;i++){ if(String(state.trips[i].id)===String(id)) return state.trips[i]; } return null; }
 
-  function remind(){
-    var p = parkById(state.selected); if (!p) return;
-    var net = NETWORKS[p.network]; if (!net || !net.window || !state.dates.in) return;
-    var arrival = new Date(state.dates.in+"T00:00:00");
+  function downloadReminder(p, dateInStr){
+    if (!p) return;
+    var net = NETWORKS[p.network]; if (!net || !net.window || !dateInStr) return;
+    var arrival = new Date(dateInStr+"T00:00:00");
     var openDate = new Date(arrival.getTime() - net.window*86400000);
     function z(n){ return (n<10?"0":"")+n; }
     var ymd = openDate.getFullYear()+z(openDate.getMonth()+1)+z(openDate.getDate());
@@ -366,6 +379,68 @@
       '<div style="font-size:13.5px;margin-top:8px;line-height:1.5">On the build queue. Validating earlier tabs first, then rebuilding this one against the spec.</div></div>';
   }
 
+  function tripCard(t, past){
+    var p = parkById(t.parkId); if (!p) return "";
+    var net = NETWORKS[p.network];
+    var ci = cost(p);
+    var nights = nightsBetween(t.dateIn, t.dateOut);
+    var dateLine = (t.dateIn && t.dateOut)
+      ? fmtDate(new Date(t.dateIn+"T00:00:00"))+" → "+fmtDate(new Date(t.dateOut+"T00:00:00"))+" · "+nights+" night"+(nights===1?"":"s")
+      : "";
+    var bi = past ? null : bookingInfo(p, t.dateIn);
+    var bw = "";
+    if (bi){
+      if (bi.openIn>0){
+        bw = '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          '<span style="font-size:12px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:4px 10px;border-radius:999px">Books in '+bi.openIn+' day'+(bi.openIn===1?"":"s")+' · '+fmtDate(bi.openDate)+'</span>'+
+          '<button class="tap" data-act="trip-remind" data-arg="'+t.id+'" style="font-size:12px;font-weight:700;color:'+C.green+';display:inline-flex;align-items:center;gap:4px">'+ic("bell",13,C.green)+'Remind</button></div>';
+      } else {
+        bw = '<div style="margin-top:10px"><span style="font-size:12px;font-weight:700;color:'+C.green+';background:rgba(47,107,70,.12);padding:4px 10px;border-radius:999px">Booking open now</span></div>';
+      }
+    }
+    var stayWarn = (net.maxStay && nights>net.maxStay)
+      ? '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12px;font-weight:600">'+ic("alert",13,C.clay)+nights+' nights exceeds '+esc(net.short)+'’s '+net.maxStay+'-night max.</div>'
+      : "";
+    return '<div class="tcard"'+(past?' style="opacity:.6"':'')+'>'+
+      '<div style="display:flex;align-items:flex-start;gap:8px">'+
+        '<div style="flex:1">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
+            '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
+          '</div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+esc(p.city)+', '+esc(p.st)+'</div>'+
+        '</div>'+pill(ci)+
+      '</div>'+
+      (dateLine? '<div style="font-size:13px;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px">'+ic("calendar",14,C.pine)+esc(dateLine)+'</div>':'')+
+      bw + stayWarn +
+      '<div style="display:flex;gap:8px;margin-top:12px">'+
+        '<button class="btnO tap" data-act="trip-view" data-arg="'+t.id+'" style="flex:1">View park</button>'+
+        '<button class="tap" data-act="trip-remove" data-arg="'+t.id+'" style="padding:11px 14px;border-radius:11px;border:1px solid rgba(168,71,47,.3);color:'+C.clay+';font-weight:700;font-size:13px">Remove</button>'+
+      '</div></div>';
+  }
+
+  function tripsView(){
+    ensureTripIds();
+    var today = todayLocalStr();
+    var trips = state.trips.slice().sort(function(a,b){ return (a.dateIn||"").localeCompare(b.dateIn||""); });
+    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Trips</div>';
+    if (!trips.length){
+      return head + '<div style="font-size:12.5px;color:'+C.muted+'">Your saved stays and booking windows</div></div>'+
+        '<div style="padding:30px 24px;text-align:center;color:'+C.muted+'">'+ic("calendar",34,"#cdbfa6")+
+        '<div style="font-size:15px;font-weight:700;color:'+C.ink+';margin-top:10px">No trips saved yet</div>'+
+        '<div style="font-size:13px;margin-top:6px;line-height:1.5">Find a park in Explore, pick your dates, and tap “Add to my trips” to track its booking window here.</div>'+
+        '<button class="btnG tap" data-act="nav" data-arg="explore" style="margin:16px auto 0;max-width:220px">Explore parks</button></div>';
+    }
+    var upcoming = trips.filter(function(t){ return !t.dateOut || t.dateOut>=today; });
+    var past = trips.filter(function(t){ return t.dateOut && t.dateOut<today; });
+    var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · booking windows tracked</div></div>'+
+      '<div style="padding:6px 16px 8px">';
+    html += upcoming.map(function(t){ return tripCard(t,false); }).join("");
+    if (past.length){ html += '<div class="dlabel" style="margin:14px 2px 8px">Past</div>'+past.map(function(t){ return tripCard(t,true); }).join(""); }
+    html += '</div>';
+    return html;
+  }
+
   function navView(){
     return '<div class="nav">'+NAV.map(function(n){
       var on = (state.tab===n[0] || (n[0]==="explore" && state.tab==="explore")) ? " on" : "";
@@ -390,7 +465,7 @@
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
     else if (state.tab==="tools"){ body = stubView("Coverage &amp; savings"); }
-    else if (state.tab==="trips"){ body = stubView("Trips"); }
+    else if (state.tab==="trips"){ body = tripsView(); }
     else if (state.tab==="refer"){ body = stubView("Refer a friend"); }
     else if (state.tab==="profile"){ body = stubView("Profile"); }
     else if (state.tab==="perks"){ body = stubView("Perks"); }
@@ -427,17 +502,23 @@
     else if (act==="back"){ state.selected=null; render(); }
     else if (act==="netfilter"){ state.netFilter=arg; render(); }
     else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; render(); }
-    else if (act==="remind"){ remind(); }
+    else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
     else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ window.open(NETWORKS[pp.network].url,"_blank"); } }
     else if (act==="copynum"){ var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
     else if (act==="addtrip"){
       var pk=parkById(state.selected);
       if (!pk) return;
       if (!state.dates.in || !state.dates.out){ alert("Pick your arrival and departure dates first."); return; }
-      state.trips.push({ parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network });
+      state.trips.push({ id:Date.now(), parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network });
       persist();
-      alert("Added "+pk.name+" to your trips.");
-      state.selected=null; render();
+      state.tab="trips"; state.selected=null; render();
+    }
+    else if (act==="trip-view"){ var tv=tripById(arg); if(tv){ state.tab="explore"; state.selected=tv.parkId; state.dates={in:tv.dateIn||"",out:tv.dateOut||""}; render(); } }
+    else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
+    else if (act==="trip-remove"){
+      var trm=tripById(arg);
+      var pnm = (trm && parkById(trm.parkId)) ? parkById(trm.parkId).name : "this trip";
+      if (trm && confirm("Remove "+pnm+" from your trips?")){ state.trips=state.trips.filter(function(x){ return String(x.id)!==String(arg); }); persist(); render(); }
     }
   });
   document.addEventListener("input", function(e){
