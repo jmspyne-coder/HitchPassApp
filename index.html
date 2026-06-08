@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hitch Pass</title>
+<meta name="description" content="Independent, unofficial RV membership wallet. Not affiliated with or endorsed by Thousand Trails, Encore, ELS, RPI, Coast to Coast, or any campground network." />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Hitch Pass" />
+<meta name="theme-color" content="#1f3d2c" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#ece5d6;}
+  body{font-family:'Hanken Grotesk',system-ui,-apple-system,Segoe UI,sans-serif;color:#1f1c17;-webkit-font-smoothing:antialiased;}
+  .disp{font-family:'Playfair Display',Georgia,'Times New Roman',serif;}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  input{font-family:inherit;}
+  .tap{-webkit-tap-highlight-color:transparent;transition:transform .08s ease,opacity .12s ease;}
+  .tap:active{transform:scale(.97);opacity:.9;}
+  ::-webkit-scrollbar{width:0;height:0;}
+  .wrap{max-width:480px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;background:#ece5d6;}
+  .content{flex:1;overflow-y:auto;}
+  .ribbon{background:#15110c;color:rgba(255,255,255,.82);font-size:12px;font-weight:600;line-height:1.4;padding:10px 16px;display:flex;gap:8px;align-items:flex-start;}
+  .footer{text-align:center;font-size:11.5px;font-weight:600;color:#867d6c;padding:10px 16px;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;}
+  .nav{display:flex;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;padding-bottom:env(safe-area-inset-bottom);}
+  .navBtn{flex:1;padding:9px 0 11px;display:flex;flex-direction:column;align-items:center;gap:3px;color:#867d6c;font-size:10.5px;font-weight:600;}
+  .navBtn.on{color:#cf5a26;font-weight:700;}
+  .hero{background:#1f3d2c;padding:22px 18px 26px;border-bottom-left-radius:22px;border-bottom-right-radius:22px;}
+  .chip{background:rgba(255,255,255,.12);color:#f3ead9;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;}
+  .stat{background:rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;}
+  .tile{text-align:left;background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;width:100%;}
+  .tileIc{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;}
+  .pcard{text-align:left;width:100%;background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:10px;align-items:center;}
+  .fchip{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(31,28,23,.14);color:#5b5446;background:#fff;}
+  .fchip.on{background:#1f3d2c;color:#faf6ec;border-color:#1f3d2c;}
+  .q{width:100%;padding:11px 14px;border-radius:11px;border:1px solid rgba(31,28,23,.14);font-size:14px;outline:none;background:#fff;}
+  .det{background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:16px;padding:16px;margin:0 16px 14px;}
+  .dlabel{font-size:11px;font-weight:700;letter-spacing:.06em;color:#867d6c;text-transform:uppercase;}
+  .dinput{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(31,28,23,.16);font-size:14px;outline:none;background:#fff;margin-top:5px;}
+  .btnP{width:100%;padding:12px;border-radius:11px;background:#cf5a26;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:7px;}
+  .btnG{width:100%;padding:12px;border-radius:11px;background:#1f3d2c;color:#faf6ec;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:7px;}
+  .btnO{width:100%;padding:11px;border-radius:11px;background:#fff;border:1px solid rgba(31,28,23,.16);color:#1f3d2c;font-weight:700;font-size:13.5px;}
+  #splash{position:fixed;inset:0;z-index:9999;background:#1f3d2c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .45s ease;padding:24px;}
+  #splash .nm{font-family:'Playfair Display',Georgia,serif;color:#faf6ec;font-size:32px;font-weight:800;text-align:center;}
+  #splash .sub{color:#e0875a;font-size:13px;font-weight:600;letter-spacing:.4px;}
+  #splash .spin{margin-top:8px;width:26px;height:26px;border:3px solid rgba(255,255,255,.22);border-top-color:#e0875a;border-radius:50%;animation:spin .8s linear infinite;}
+  #splash .disc{position:absolute;bottom:28px;left:0;right:0;text-align:center;color:rgba(255,255,255,.42);font-size:11px;font-weight:600;padding:0 24px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #gate{position:fixed;inset:0;background:#1f3d2c;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;}
+  #gate input{width:100%;max-width:280px;padding:13px 16px;border-radius:12px;border:none;font-size:16px;text-align:center;outline:none;font-family:inherit;}
+  #gate .btn{width:100%;max-width:280px;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px;}
+</style>
+</head>
+<body>
+<div id="splash">
+  <div class="nm">Hitch Pass</div>
+  <div class="sub">Your RV membership wallet</div>
+  <div class="spin"></div>
+  <div class="disc">Unofficial · made by a customer, not the company</div>
+</div>
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var C = { ink:"#1f1c17", cream:"#ece5d6", pine:"#1f3d2c", pine2:"#284e38",
+    green:"#2f6b46", ember:"#cf5a26", clay:"#a8472f", muted:"#867d6c" };
+
+  var NETWORKS = {
+    tt:  { short:"TT",       name:"Thousand Trails",            count:82,   tier:"included",   price:"Free with pass",     window:180, maxStay:21, url:"https://thousandtrails.com/reservations" },
+    enc: { short:"Encore",   name:"Trails Collection · Encore", count:122, tier:"included", price:"Free w/ TC Plus",   window:90,  maxStay:21, url:"https://encorervresorts.com" },
+    rpi: { short:"RPI",      name:"Resort Parks Intl",          count:380,  tier:"discounted", price:"~$10 / night",       window:90,  maxStay:14, url:"https://resortparks.com" },
+    c2c: { short:"C2C",      name:"Coast to Coast",             count:200,  tier:"confirm",    price:"Confirm access",     window:90,  maxStay:14, url:"https://coastresorts.com" },
+    pa:  { short:"PA",       name:"Passport America",           count:1500, tier:"discounted", price:"50% off rate",       window:0,   maxStay:0,  url:"https://passportamerica.com" },
+    hh:  { short:"Harvest",  name:"Harvest Hosts",              count:5000, tier:"included",   price:"Free w/ membership", window:0,   maxStay:1,  url:"https://harvesthosts.com" },
+    gs:  { short:"Good Sam", name:"Good Sam",                   count:2000, tier:"discounted", price:"10% off rate",       window:0,   maxStay:0,  url:"https://goodsam.com" }
+  };
+
+  var TIER = {
+    included:   { bg:"rgba(47,107,70,.12)",  fg:"#2f6b46", label:"$0" },
+    discounted: { bg:"rgba(207,90,38,.12)",  fg:"#cf5a26", label:"$"  },
+    paid:       { bg:"rgba(168,71,47,.13)",  fg:"#a8472f", label:"$$" },
+    confirm:    { bg:"rgba(134,125,108,.15)",fg:"#867d6c", label:"?"  },
+    locked:     { bg:"rgba(134,125,108,.12)",fg:"#867d6c", label:"+"  }
+  };
+
+  /* illustrative sample across networks/regions; swap for real export */
+  var PARKS = [
+    { id:1,  name:"Pacific City",   city:"Cloverdale",   st:"OR", region:"Northwest",     network:"tt",  rating:4.6, highUse:true,  maxRig:40 },
+    { id:2,  name:"Seaside",        city:"Seaside",      st:"OR", region:"Northwest",     network:"tt",  rating:4.4, highUse:true,  maxRig:35 },
+    { id:3,  name:"Whaler's Rest",  city:"South Beach",  st:"OR", region:"Northwest",     network:"tt",  rating:4.5, highUse:false, maxRig:40 },
+    { id:4,  name:"Russian River",  city:"Cloverdale",   st:"CA", region:"California",    network:"tt",  rating:4.3, highUse:true,  maxRig:38 },
+    { id:5,  name:"Pio Pico",       city:"Jamul",        st:"CA", region:"California",    network:"tt",  rating:4.2, highUse:false, maxRig:45 },
+    { id:6,  name:"Lake Conroe",    city:"Willis",       st:"TX", region:"South-Central", network:"tt",  rating:4.5, highUse:true,  maxRig:45 },
+    { id:7,  name:"Colorado River", city:"Columbus",     st:"TX", region:"South-Central", network:"tt",  rating:4.1, highUse:false, maxRig:40 },
+    { id:8,  name:"Lake Tawakoni",  city:"Point",        st:"TX", region:"South-Central", network:"tt",  rating:4.0, highUse:false, maxRig:42 },
+    { id:9,  name:"Orlando",        city:"Clermont",     st:"FL", region:"Southeast",     network:"tt",  rating:4.4, highUse:true,  maxRig:40 },
+    { id:10, name:"Peace River",    city:"Wauchula",     st:"FL", region:"Southeast",     network:"tt",  rating:4.3, highUse:false, maxRig:45 },
+    { id:11, name:"Gettysburg Farm",city:"Dover",        st:"PA", region:"Northeast",     network:"tt",  rating:4.2, highUse:false, maxRig:40 },
+    { id:12, name:"Chesapeake Bay", city:"Gloucester",   st:"VA", region:"Northeast",     network:"tt",  rating:4.1, highUse:false, maxRig:40 },
+    { id:13, name:"Verde Valley",   city:"Cottonwood",   st:"AZ", region:"Southwest",     network:"enc", rating:4.5, highUse:true,  maxRig:45 },
+    { id:14, name:"Sunshine Key",   city:"Big Pine Key", st:"FL", region:"Southeast",     network:"enc", rating:4.6, highUse:true,  maxRig:40, priceOverride:{ tier:"paid", price:"~$20+/night", label:"$$" } },
+    { id:15, name:"Pala Mesa",      city:"Fallbrook",    st:"CA", region:"California",    network:"enc", rating:4.0, highUse:false, maxRig:40 },
+    { id:16, name:"Rancho Oso",     city:"Santa Barbara",st:"CA", region:"California",    network:"enc", rating:4.2, highUse:false, maxRig:35 },
+    { id:17, name:"Lake Magic",     city:"Clermont",     st:"FL", region:"Southeast",     network:"enc", rating:4.3, highUse:true,  maxRig:45 },
+    { id:18, name:"Frontier Town",  city:"Berlin",       st:"MD", region:"Northeast",     network:"enc", rating:4.1, highUse:false, maxRig:40 },
+    { id:19, name:"Mesa Spirit",    city:"Mesa",         st:"AZ", region:"Southwest",     network:"enc", rating:4.4, highUse:true,  maxRig:45 },
+    { id:20, name:"Pio Pico Resort",city:"Jamul",        st:"CA", region:"California",    network:"rpi", rating:3.9, highUse:false, maxRig:40 },
+    { id:21, name:"Canyon Vistas",  city:"Gold Canyon",  st:"AZ", region:"Southwest",     network:"rpi", rating:4.0, highUse:false, maxRig:45 },
+    { id:22, name:"Bay Landing",    city:"Bridgeport",   st:"TX", region:"South-Central", network:"rpi", rating:3.8, highUse:false, maxRig:40 },
+    { id:23, name:"Tropic Star",    city:"Naples",       st:"FL", region:"Southeast",     network:"c2c", rating:3.9, highUse:false, maxRig:40 },
+    { id:24, name:"Lakewood",       city:"Davison",      st:"MI", region:"Midwest",       network:"c2c", rating:3.7, highUse:false, maxRig:38 }
+  ];
+
+  var KEY = "hitchpass.v1";
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
+  function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }
+  var saved = load();
+  var state = {
+    unlocked: !!saved.unlocked,
+    tab: "home",
+    wallet: saved.wallet || ["tt","enc"],
+    trips: saved.trips || [],
+    profile: saved.profile || { members:{}, rigLength:null },
+    q: "", netFilter: "", freeOnly: false,
+    selected: null, dates: { in:"", out:"" }
+  };
+  function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile }); }
+
+  var PASSCODE = "hitch";
+
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  var P = {
+    tent:'<path d="M3 20h18L12 4 3 20z"/><path d="M12 4v16"/>',
+    share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
+    compass:'<circle cx="12" cy="12" r="9"/><path d="M16 8l-2 6-6 2 2-6 6-2z"/>',
+    percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    pin:'<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    userplus:'<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M18.5 8v6M15.5 11h6"/>',
+    home:'<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>',
+    calendar:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
+    sparkles:'<path d="M12 3l1.8 4.7L18.5 9l-4.7 1.3L12 15l-1.8-4.7L5.5 9l4.7-1.3L12 3z"/>',
+    alert:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>',
+    lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    chevron:'<path d="M9 6l6 6-6 6"/>',
+    back:'<path d="M15 6l-6 6 6 6"/>',
+    bell:'<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    ext:'<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 13v6H5V5h6"/>'
+  };
+  function ic(name, size, color){
+    return '<svg width="'+(size||20)+'" height="'+(size||20)+'" viewBox="0 0 24 24" fill="none" stroke="'+
+      (color||"currentColor")+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(P[name]||"")+'</svg>';
+  }
+
+  function prodURL(){
+    var h = location.hostname;
+    var bad = !h || h==="localhost" || h.indexOf(".local")>-1 || h.indexOf("claude")>-1 ||
+              h.indexOf("anthropic")>-1 || h.indexOf("sandbox")>-1 || h.indexOf("usercontent")>-1 ||
+              /^\d+\.\d+\.\d+\.\d+$/.test(h);
+    return bad ? "https://hitchpass.com" : location.origin + location.pathname;
+  }
+  function shareApp(){
+    var url = prodURL();
+    if (navigator.share){ navigator.share({ title:"Hitch Pass", text:"My RV membership wallet", url:url }).catch(function(){}); }
+    else if (navigator.clipboard){ navigator.clipboard.writeText(url); alert("Link copied: "+url); }
+    else { alert(url); }
+  }
+
+  /* ---- engine ---- */
+  function cost(p){
+    var n = NETWORKS[p.network];
+    if (state.wallet.indexOf(p.network)===-1) return { tier:"locked", price:"Add this card", label:TIER.locked.label };
+    if (p.priceOverride) return p.priceOverride;
+    return { tier:n.tier, price:n.price, label:TIER[n.tier].label };
+  }
+  function pill(info){
+    var s = TIER[info.tier];
+    var lk = info.tier==="locked" ? ic("lock",11,s.fg) : "";
+    return '<span style="background:'+s.bg+';color:'+s.fg+';font-weight:700;font-size:11.5px;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:5px">'+lk+info.label+' · '+esc(info.price)+'</span>';
+  }
+  function parkById(id){ for (var i=0;i<PARKS.length;i++){ if (PARKS[i].id===id) return PARKS[i]; } return null; }
+  function fmtDate(d){ return d.toLocaleDateString(undefined,{ weekday:"short", month:"short", day:"numeric" }); }
+
+  function remind(){
+    var p = parkById(state.selected); if (!p) return;
+    var net = NETWORKS[p.network]; if (!net || !net.window || !state.dates.in) return;
+    var arrival = new Date(state.dates.in+"T00:00:00");
+    var openDate = new Date(arrival.getTime() - net.window*86400000);
+    function z(n){ return (n<10?"0":"")+n; }
+    var ymd = openDate.getFullYear()+z(openDate.getMonth()+1)+z(openDate.getDate());
+    var ics = "data:text/calendar;charset=utf8," + encodeURIComponent(
+      ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","DTSTART;VALUE=DATE:"+ymd,"DTEND;VALUE=DATE:"+ymd,
+       "SUMMARY:Book "+p.name+" ("+net.short+")",
+       "DESCRIPTION:Your "+net.window+"-day booking window opens today. Reserve early—popular sites fill fast.",
+       "END:VEVENT","END:VCALENDAR"].join("\n"));
+    var a = document.createElement("a"); a.href = ics; a.download = "booking-reminder.ics";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  /* ---- views ---- */
+  var NAV = [
+    ["home","Home","home"],["explore","Explore","compass"],["trips","Trips","calendar"],
+    ["refer","Refer","userplus"],["profile","Profile","user"],["perks","Perks","sparkles"]
+  ];
+
+  function homeView(){
+    var held = state.wallet.map(function(id){ return NETWORKS[id]; }).filter(Boolean);
+    var union = held.reduce(function(s,n){ return s + (n.count||0); }, 0);
+    var chips = held.length
+      ? held.map(function(n){ return '<span class="chip">'+n.short+'</span>'; }).join("")
+      : '<span style="color:#cdbfa6;font-size:12px">No cards yet — add them in Profile</span>';
+    var stats = held.map(function(n){
+      return '<div class="stat"><div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1">'+
+        n.count+'</div><div style="color:#cdbfa6;font-size:13px;margin-top:3px">'+esc(n.name)+'</div></div>';
+    }).join("");
+    var statCols = held.length>1 ? "1fr 1fr" : "1fr";
+    function tile(name,color,title,sub,arg){
+      return '<button class="tile tap" data-act="nav" data-arg="'+arg+'">'+
+        '<div class="tileIc" style="background:'+color+'">'+ic(name,22,"#faf6ec")+'</div>'+
+        '<div><div class="disp" style="font-size:19px;font-weight:800;line-height:1.1">'+title+
+        '</div><div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+sub+'</div></div></button>';
+    }
+    return ''+
+      '<div class="hero">'+
+        '<div style="display:flex;align-items:flex-start;gap:14px">'+
+          '<div style="width:58px;height:58px;border-radius:15px;background:'+C.ember+';display:grid;place-items:center;flex-shrink:0">'+ic("tent",30,"#fff")+'</div>'+
+          '<div style="flex:1">'+
+            '<div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1.04">Hitch Pass</div>'+
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">'+chips+'</div>'+
+            '<div style="color:#a9bdab;font-size:12px;margin-top:7px">Independent · unofficial wallet</div>'+
+          '</div>'+
+          '<button class="tap" data-act="share" aria-label="Share" style="width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center">'+ic("share",19,"#faf6ec")+'</button>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:'+statCols+';gap:10px;margin-top:18px">'+stats+'</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px">'+
+        tile("compass",C.pine2,"Explore parks",union+" locations","explore")+
+        tile("percent",C.green,"Free in my wallet","$0 only","explorefree")+
+        tile("pin",C.ember,"Coverage &amp; savings","Pitch tool","tools")+
+        tile("userplus",C.clay,"Refer a friend","Send to your agent","refer")+
+      '</div>';
+  }
+
+  function listHTML(){
+    var q = state.q.trim().toLowerCase();
+    var ps = PARKS.filter(function(p){
+      if (state.netFilter && p.network!==state.netFilter) return false;
+      if (state.freeOnly && cost(p).tier!=="included") return false;
+      if (q){ var hay=(p.name+" "+p.city+" "+p.st).toLowerCase(); if (hay.indexOf(q)===-1) return false; }
+      return true;
+    });
+    if (!ps.length) return '<div style="padding:26px;text-align:center;color:'+C.muted+';font-size:13.5px">No parks match.</div>';
+    var rig = state.profile.rigLength;
+    return ps.map(function(p){
+      var net = NETWORKS[p.network];
+      var ci = cost(p);
+      var tags = pill(ci);
+      if (p.highUse) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 8px;border-radius:999px">Books fast</span>';
+      if (rig && p.maxRig && rig>p.maxRig) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.clay+';background:rgba(168,71,47,.12);padding:3px 8px;border-radius:999px">Rig too long</span>';
+      return '<button class="pcard tap" data-act="park" data-arg="'+p.id+'">'+
+        '<div style="flex:1">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
+            '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
+          '</div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+esc(p.city)+', '+esc(p.st)+' · ★ '+p.rating+'</div>'+
+          '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+tags+'</div>'+
+        '</div>'+ic("chevron",18,C.muted)+'</button>';
+    }).join("");
+  }
+
+  function exploreView(){
+    var present = {}; PARKS.forEach(function(p){ present[p.network]=true; });
+    var chips = '<button class="fchip tap'+(state.netFilter===""?" on":"")+'" data-act="netfilter" data-arg="">All</button>';
+    Object.keys(NETWORKS).forEach(function(id){ if (present[id]) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
+    var freeChip = '<button class="fchip tap'+(state.freeOnly?" on":"")+'" data-act="freeonly">$0 in my wallet</button>';
+    return ''+
+      '<div style="padding:16px 16px 6px">'+
+        '<div class="disp" style="font-size:24px;font-weight:800">Explore</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:12px">Everywhere your wallet can take you</div>'+
+        '<input id="q" class="q" placeholder="Search parks or cities" value="'+esc(state.q)+'" />'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+freeChip+'</div>'+
+      '</div>'+
+      '<div id="plist" style="padding:8px 16px 8px">'+listHTML()+'</div>';
+  }
+
+  function detailView(){
+    var p = parkById(state.selected);
+    if (!p){ state.selected=null; return exploreView(); }
+    var net = NETWORKS[p.network];
+    var ci = cost(p);
+    var locked = ci.tier==="locked";
+    var head =
+      '<button class="tap" data-act="back" style="display:flex;align-items:center;gap:6px;color:'+C.muted+';font-weight:600;font-size:13.5px;padding:14px 16px 4px">'+ic("back",18,C.muted)+'Back to parks</button>'+
+      '<div class="det">'+
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">'+
+          '<div><div class="disp" style="font-size:23px;font-weight:800;line-height:1.1">'+esc(p.name)+'</div>'+
+          '<div style="font-size:13px;color:'+C.muted+';margin-top:3px">'+esc(p.city)+', '+esc(p.st)+' · ★ '+p.rating+' · '+esc(net.name)+'</div></div>'+
+        '</div>'+
+        '<div style="margin-top:10px">'+pill(ci)+'</div>';
+
+    if (locked){
+      return head +
+        '<div style="margin-top:14px;font-size:13.5px;color:'+C.muted+';line-height:1.5">You don’t hold <b>'+esc(net.name)+'</b> in your wallet. Add it in Profile to see your rate, booking window, and reserve here.</div>'+
+        '<button class="btnG tap" data-act="nav" data-arg="profile" style="margin-top:14px">Manage my wallet</button>'+
+        '</div>'+ note();
+    }
+
+    var arrival = state.dates.in ? new Date(state.dates.in+"T00:00:00") : null;
+    var openDate = (arrival && net.window) ? new Date(arrival.getTime() - net.window*86400000) : null;
+    var openIn = openDate ? Math.ceil((openDate - new Date(new Date().toDateString()))/86400000) : null;
+    var nights = (state.dates.in && state.dates.out) ? Math.round((new Date(state.dates.out+"T00:00:00") - arrival)/86400000) : 0;
+    var overStay = net.maxStay && nights>net.maxStay;
+
+    var rules = net.window
+      ? esc(net.short)+': up to '+net.maxStay+' nights · book up to '+net.window+' days out'
+      : esc(net.short)+': no fixed booking window';
+
+    var bw = "";
+    if (net.window && arrival && openIn!==null){
+      if (openIn>0){
+        bw = '<div style="margin-top:12px;background:rgba(207,90,38,.08);border:1px solid '+C.ember+';border-radius:13px;padding:12px 14px">'+
+          '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.ember+'">'+ic("calendar",17,C.ember)+'</span>'+
+          '<span style="font-size:13.5px;font-weight:700">Booking opens in '+openIn+' day'+(openIn===1?"":"s")+'</span></div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">'+esc(net.short)+'’s '+net.window+'-day window for these dates opens '+fmtDate(openDate)+'. Popular parks book out the morning it opens — set a reminder.</div>'+
+          '<button class="btnP tap" data-act="remind" style="margin-top:10px">'+ic("bell",15,"#fff")+'Remind me '+fmtDate(openDate)+'</button></div>';
+      } else {
+        bw = '<div style="margin-top:12px;background:rgba(47,107,70,.10);border:1px solid '+C.green+';border-radius:13px;padding:12px 14px">'+
+          '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.green+'">'+ic("calendar",17,C.green)+'</span>'+
+          '<span style="font-size:13.5px;font-weight:700">Booking window is open now</span></div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">You’re inside '+esc(net.short)+'’s '+net.window+'-day window — reserve these dates before they fill.</div></div>';
+      }
+    }
+    var stayWarn = overStay
+      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+net.maxStay+'-night max stay.</div>'
+      : "";
+
+    var num = (state.profile.members && state.profile.members[p.network]) || "";
+    var memBlock = num
+      ? '<div style="margin-top:14px;font-size:13px"><span style="color:'+C.muted+'">Your '+esc(net.short)+' #: </span><b>'+esc(num)+'</b> <button class="tap" data-act="copynum" style="color:'+C.green+';font-weight:700;font-size:12.5px;margin-left:6px">Copy</button></div>'
+      : '<div style="margin-top:14px;font-size:12px;color:'+C.muted+'">Add your '+esc(net.short)+' number in Profile for one-tap copy at booking.</div>';
+
+    return head +
+      '<div style="margin-top:14px;font-size:12.5px;color:'+C.muted+';font-weight:600">'+rules+'</div>'+
+      '<div style="display:flex;gap:10px;margin-top:12px">'+
+        '<div style="flex:1"><div class="dlabel">Arrival</div><input class="dinput" type="date" data-date="in" value="'+esc(state.dates.in)+'" /></div>'+
+        '<div style="flex:1"><div class="dlabel">Departure</div><input class="dinput" type="date" data-date="out" value="'+esc(state.dates.out)+'" /></div>'+
+      '</div>'+
+      bw + stayWarn + memBlock +
+      '<button class="btnG tap" data-act="addtrip" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Add to my trips</button>'+
+      '<button class="btnO tap" data-act="reserve" style="margin-top:10px">Reserve on '+esc(net.short)+' '+ic("ext",13,C.pine)+'</button>'+
+      '</div>' + note();
+  }
+  function note(){
+    return '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;padding:0 24px 14px;line-height:1.5">Listings are for reference — always confirm availability, price, and rules on the network’s site. Hitch Pass can’t book for you.</div>';
+  }
+
+  function stubView(name){
+    return '<div style="padding:40px 24px;text-align:center;color:'+C.muted+'">'+
+      '<div class="disp" style="font-size:22px;font-weight:800;color:'+C.ink+'">'+name+'</div>'+
+      '<div style="font-size:13.5px;margin-top:8px;line-height:1.5">On the build queue. Validating earlier tabs first, then rebuilding this one against the spec.</div></div>';
+  }
+
+  function navView(){
+    return '<div class="nav">'+NAV.map(function(n){
+      var on = (state.tab===n[0] || (n[0]==="explore" && state.tab==="explore")) ? " on" : "";
+      return '<button class="navBtn tap'+on+'" data-act="nav" data-arg="'+n[0]+'">'+ic(n[2],21)+'<span>'+n[1]+'</span></button>';
+    }).join("")+'</div>';
+  }
+
+  function gateView(){
+    return '<div id="gate">'+ic("tent",42,"#e0875a")+
+      '<div class="disp" style="color:#faf6ec;font-size:26px;font-weight:800">Hitch Pass</div>'+
+      '<div style="color:#a9bdab;font-size:13px;margin-top:-8px">Enter passcode to continue</div>'+
+      '<input id="pc" type="password" placeholder="Passcode" autocomplete="off" />'+
+      '<div id="pcerr" style="color:#f0a070;font-size:12.5px;display:none">Incorrect passcode</div>'+
+      '<button class="btn tap" data-act="unlock">Enter</button>'+
+      '<div style="position:absolute;bottom:26px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;text-align:center;padding:0 24px">Unofficial · made by a customer, not the company</div></div>';
+  }
+
+  function render(){
+    var app = document.getElementById("app");
+    if (!state.unlocked){ app.innerHTML = gateView(); var pc=document.getElementById("pc"); if(pc) pc.focus(); return; }
+    var body;
+    if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
+    else if (state.tab==="home"){ body = homeView(); }
+    else if (state.tab==="tools"){ body = stubView("Coverage &amp; savings"); }
+    else if (state.tab==="trips"){ body = stubView("Trips"); }
+    else if (state.tab==="refer"){ body = stubView("Refer a friend"); }
+    else if (state.tab==="profile"){ body = stubView("Profile"); }
+    else if (state.tab==="perks"){ body = stubView("Perks"); }
+    else { body = homeView(); }
+    app.innerHTML = '<div class="wrap">'+
+      '<div class="ribbon">'+ic("alert",14,"#e0875a")+'<span>Unofficial · made by a customer, not by Thousand Trails / Encore / ELS · all names are trademarks of their owners</span></div>'+
+      '<div class="content">'+body+'</div>'+
+      '<div class="footer">Unofficial · made by a customer, not the company</div>'+
+      navView()+
+    '</div>';
+  }
+
+  function tryUnlock(){
+    var i = document.getElementById("pc");
+    if (i && i.value.trim().toLowerCase()===PASSCODE){ state.unlocked=true; persist(); render(); }
+    else { var e=document.getElementById("pcerr"); if(e) e.style.display="block"; if(i){ i.value=""; i.focus(); } }
+  }
+
+  /* ---- events ---- */
+  document.addEventListener("click", function(e){
+    var el = e.target.closest ? e.target.closest("[data-act]") : null;
+    if (!el) return;
+    var act = el.getAttribute("data-act");
+    var arg = el.getAttribute("data-arg");
+    if (act==="nav"){
+      if (arg==="explorefree"){ state.tab="explore"; state.selected=null; state.freeOnly=true; }
+      else if (arg==="explore"){ state.tab="explore"; state.selected=null; }
+      else { state.tab=arg; state.selected=null; }
+      render();
+    }
+    else if (act==="share"){ shareApp(); }
+    else if (act==="unlock"){ tryUnlock(); }
+    else if (act==="park"){ state.selected=parseInt(arg,10); state.dates={in:"",out:""}; render(); }
+    else if (act==="back"){ state.selected=null; render(); }
+    else if (act==="netfilter"){ state.netFilter=arg; render(); }
+    else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; render(); }
+    else if (act==="remind"){ remind(); }
+    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ window.open(NETWORKS[pp.network].url,"_blank"); } }
+    else if (act==="copynum"){ var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
+    else if (act==="addtrip"){
+      var pk=parkById(state.selected);
+      if (!pk) return;
+      if (!state.dates.in || !state.dates.out){ alert("Pick your arrival and departure dates first."); return; }
+      state.trips.push({ parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network });
+      persist();
+      alert("Added "+pk.name+" to your trips.");
+      state.selected=null; render();
+    }
+  });
+  document.addEventListener("input", function(e){
+    if (e.target && e.target.id==="q"){ state.q=e.target.value; var l=document.getElementById("plist"); if(l) l.innerHTML=listHTML(); }
+  });
+  document.addEventListener("change", function(e){
+    var d = e.target && e.target.getAttribute ? e.target.getAttribute("data-date") : null;
+    if (d){ state.dates[d]=e.target.value; render(); }
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key==="Enter" && !state.unlocked){ tryUnlock(); }
+  });
+
+  render();
+  var sp = document.getElementById("splash");
+  if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }
+})();
+</script>
+</body>
+</html>
