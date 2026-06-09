@@ -9,6 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Hitch Pass" />
 <meta name="theme-color" content="#1f3d2c" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   *{box-sizing:border-box;}
@@ -71,12 +73,12 @@
     green:"#2f6b46", ember:"#cf5a26", clay:"#a8472f", muted:"#867d6c" };
 
   var NETWORKS = {
-    tt:  { short:"TT",       name:"Thousand Trails",            count:82,   tier:"included",   price:"Free with pass",     window:180, maxStay:21, url:"https://thousandtrails.com/reservations" },
-    enc: { short:"Encore",   name:"Trails Collection · Encore", count:122, tier:"discounted", price:"$20 / night",   window:90,  maxStay:21, url:"https://encorervresorts.com" },
-    rpi: { short:"RPI",      name:"Resort Parks Intl",          count:380,  tier:"discounted", price:"~$10 / night",       window:90,  maxStay:14, url:"https://resortparks.com" },
-    c2c: { short:"C2C",      name:"Coast to Coast",             count:200,  tier:"confirm",    price:"Confirm access",     window:90,  maxStay:14, url:"https://coastresorts.com" },
+    tt:  { short:"TT",       name:"Thousand Trails",            count:82,   tier:"included",   price:"Free with pass",     window:180, maxStay:21, url:"https://thousandtrails.com/reservations", memLabel:"Thousand Trails #" },
+    enc: { short:"Encore",   name:"Trails Collection · Encore", count:122,  tier:"discounted", price:"$20 / night",        window:90,  maxStay:21, url:"https://encorervresorts.com", memLabel:"Encore #" },
+    rpi: { short:"RPI",      name:"Resort Parks Intl",          count:380,  tier:"discounted", price:"~$10 / night",       window:90,  maxStay:14, url:"https://resortparks.com", memLabel:"RPI member number" },
+    c2c: { short:"C2C",      name:"Coast to Coast",             count:200,  tier:"confirm",    price:"Confirm access",     window:90,  maxStay:14, url:"https://coastresorts.com", memLabel:"Coast to Coast #" },
     pa:  { short:"PA",       name:"Passport America",           count:1500, tier:"discounted", price:"50% off rate",       window:0,   maxStay:0,  url:"https://passportamerica.com" },
-    hh:  { short:"Harvest",  name:"Harvest Hosts",              count:5000, tier:"included",   price:"Free w/ membership", window:0,   maxStay:1,  url:"https://harvesthosts.com" },
+    hh:  { short:"HH",       name:"Harvest Hosts",              cardOnly:true, tier:"included", price:"Free w/ membership", url:"https://harvesthosts.com", memLabel:"Harvest Hosts member ID" },
     gs:  { short:"Good Sam", name:"Good Sam",                   count:2000, tier:"discounted", price:"10% off rate",       window:0,   maxStay:0,  url:"https://goodsam.com" }
   };
 
@@ -439,11 +441,12 @@
     var chips = held.length
       ? held.map(function(n){ return '<span class="chip">'+n.short+'</span>'; }).join("")
       : '<span style="color:#cdbfa6;font-size:12px">No cards yet — add them in Profile</span>';
-    var stats = held.map(function(n){
+    var parkNets = held.filter(function(n){ return !n.cardOnly; });
+    var stats = parkNets.map(function(n){
       return '<div class="stat"><div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1">'+
         n.count+'</div><div style="color:#cdbfa6;font-size:13px;margin-top:3px">'+esc(n.name)+'</div></div>';
     }).join("");
-    var statCols = held.length>1 ? "1fr 1fr" : "1fr";
+    var statCols = parkNets.length>1 ? "1fr 1fr" : "1fr";
     function tile(name,color,title,sub,arg){
       return '<button class="tile tap" data-act="nav" data-arg="'+arg+'">'+
         '<div class="tileIc" style="background:'+color+'">'+ic(name,22,"#faf6ec")+'</div>'+
@@ -502,7 +505,7 @@
   function exploreView(){
     var present = {}; PARKS.forEach(function(p){ present[p.network]=true; });
     var chips = '<button class="fchip tap'+(state.netFilter===""?" on":"")+'" data-act="netfilter" data-arg="">All</button>';
-    Object.keys(NETWORKS).forEach(function(id){ if (present[id]) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
+    Object.keys(NETWORKS).forEach(function(id){ if (present[id] && !NETWORKS[id].cardOnly) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
     var freeChip = '<button class="fchip tap'+(state.freeOnly?" on":"")+'" data-act="freeonly">$0 in my wallet</button>';
     return ''+
       '<div style="padding:16px 16px 6px">'+
@@ -664,11 +667,13 @@
       var n = NETWORKS[key];
       var held = state.wallet.indexOf(key) > -1;
       var toggle = '<button class="fchip tap'+(held?" on":"")+'" data-act="wallet-toggle" data-arg="'+key+'">'+(held?"In wallet":"Add")+'</button>';
+      var sub = n.cardOnly ? "Membership card · "+esc(n.price) : (n.count+" parks · "+esc(n.price));
       var row = '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(31,28,23,.07)">'+
           '<div style="flex:1"><div style="font-size:14px;font-weight:700">'+esc(n.name)+'</div>'+
-            '<div style="font-size:11.5px;color:'+C.muted+'">'+n.count+' parks · '+esc(n.price)+'</div></div>'+
+            '<div style="font-size:11.5px;color:'+C.muted+'">'+sub+'</div></div>'+
           toggle+'</div>';
-      var numField = held ? inputRow("data-member",key,esc(n.short)+" member #","text",members[key],"Member number") : "";
+      var memberLabel = n.memLabel ? esc(n.memLabel) : (esc(n.short)+" member #");
+      var numField = held ? inputRow("data-member",key,memberLabel,"text",members[key],"Member number") : "";
       return row + numField;
     }).join("");
     return '<div class="det">'+
@@ -958,6 +963,14 @@
   var sp = document.getElementById("splash");
   if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }
 })();
+</script>
+<script>
+  /* Register the service worker for offline use — no-ops where unsupported. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
 </script>
 </body>
 </html>
