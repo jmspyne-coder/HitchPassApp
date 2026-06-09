@@ -169,6 +169,38 @@
   function perksTierDef(key){ for (var i=0;i<PERKS.tiers.length;i++){ if (PERKS.tiers[i].key===key) return PERKS.tiers[i]; } return null; }
   function perksTierLabel(key){ var d=perksTierDef(key); return d?d.label:key; }
 
+  /* TT booking is tier-driven. Derive the per-tier rules from the single PERKS
+     source (the "Advance Reservations" + "Days In / Days Out" rows) — never
+     hand-author a second number table. Shape: {window, maxDaysIn, daysOut, parkToPark}. */
+  var ttTierRules = (function(){
+    function feat(label){ for (var i=0;i<PERKS.features.length;i++){ if (PERKS.features[i].label===label) return PERKS.features[i]; } return null; }
+    var adv = feat("Advance Reservations"), dio = feat("Days In / Days Out"), rules = {};
+    if (adv && dio){
+      PERKS.tiers.forEach(function(t){
+        var k = t.key;
+        var win = parseInt(adv[k], 10);                          // "150 Days" → 150
+        var cell = String(dio[k] || "");                         // "14 Days In / 7 Days Out" | "21 Days In / Park-to-Park"
+        var parkToPark = /Park-to-Park/i.test(cell);
+        var maxDaysIn = parseInt(cell, 10);                      // leading number → days in
+        var outM = cell.match(/\/\s*(\d+)\s*Days?\s*Out/i);
+        var daysOut = parkToPark ? 0 : (outM ? parseInt(outM[1], 10) : 0);
+        rules[k] = { window:win, maxDaysIn:maxDaysIn, daysOut:daysOut, parkToPark:parkToPark };
+      });
+    }
+    return rules;
+  })();
+  /* Cross-check vs the audited PERKS values — log loudly if PERKS ever drifts. */
+  (function(){
+    var want = { camping:{window:60,maxDaysIn:14,daysOut:7,parkToPark:false}, journey:{window:120,maxDaysIn:21,daysOut:0,parkToPark:true},
+                 explore:{window:150,maxDaysIn:21,daysOut:0,parkToPark:true}, adventure:{window:180,maxDaysIn:21,daysOut:0,parkToPark:true} };
+    Object.keys(want).forEach(function(k){
+      var g = ttTierRules[k], w = want[k];
+      if (!g || g.window!==w.window || g.maxDaysIn!==w.maxDaysIn || g.daysOut!==w.daysOut || g.parkToPark!==w.parkToPark){
+        if (typeof console!=="undefined") console.error("ttTierRules mismatch for "+k, g, "expected", w);
+      }
+    });
+  })();
+
   /* illustrative sample across networks/regions; swap for real export */
   var PARKS = [
     { id:1,   name:"Bend-Sunriver RV Campground", city:"Bend", st:"OR", region:"Northwest", network:"tt", lat:44.05817, lng:-121.31531 },
@@ -463,28 +495,39 @@
   function fmtDate(d){ return d.toLocaleDateString(undefined,{ weekday:"short", month:"short", day:"numeric" }); }
   function nightsBetween(a,b){ if(!a||!b) return 0; return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
   function todayLocalStr(){ var d=new Date(); function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
+  /* Single place that knows TT is tier-driven. Returns the resolved booking
+     numbers for a park; non-TT (and TT with unknown/unset tier) fall back to the
+     flat NETWORKS values, tierAware:false, no throw. */
+  function effectiveBooking(p){
+    var net = NETWORKS[p.network] || {};
+    if (p.network==="tt" && ttTierRules[state.tier]){
+      var r = ttTierRules[state.tier];
+      return { window:r.window, maxDaysIn:r.maxDaysIn, daysOut:r.daysOut, parkToPark:r.parkToPark, tierKey:state.tier, tierAware:true };
+    }
+    return { window:net.window, maxDaysIn:net.maxStay, daysOut:0, parkToPark:false, tierAware:false };
+  }
   function bookingInfo(p, dateInStr){
-    var net = NETWORKS[p.network];
-    if (!net || !net.window || !dateInStr) return null;
+    var net = NETWORKS[p.network], eb = effectiveBooking(p);
+    if (!net || !eb.window || !dateInStr) return null;
     var arrival = new Date(dateInStr+"T00:00:00");
-    var openDate = new Date(arrival.getTime() - net.window*86400000);
+    var openDate = new Date(arrival.getTime() - eb.window*86400000);
     var openIn = Math.ceil((openDate - new Date(new Date().toDateString()))/86400000);
-    return { net:net, openDate:openDate, openIn:openIn, open:openIn<=0 };
+    return { net:net, eb:eb, openDate:openDate, openIn:openIn, open:openIn<=0 };
   }
   function ensureTripIds(){ var ch=false; state.trips.forEach(function(t,i){ if(!t.id){ t.id=Date.now()+i; ch=true; } }); if(ch) persist(); }
   function tripById(id){ for(var i=0;i<state.trips.length;i++){ if(String(state.trips[i].id)===String(id)) return state.trips[i]; } return null; }
 
   function downloadReminder(p, dateInStr){
     if (!p) return;
-    var net = NETWORKS[p.network]; if (!net || !net.window || !dateInStr) return;
+    var net = NETWORKS[p.network], eb = effectiveBooking(p); if (!net || !eb.window || !dateInStr) return;
     var arrival = new Date(dateInStr+"T00:00:00");
-    var openDate = new Date(arrival.getTime() - net.window*86400000);
+    var openDate = new Date(arrival.getTime() - eb.window*86400000);
     function z(n){ return (n<10?"0":"")+n; }
     var ymd = openDate.getFullYear()+z(openDate.getMonth()+1)+z(openDate.getDate());
     var ics = "data:text/calendar;charset=utf8," + encodeURIComponent(
       ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","DTSTART;VALUE=DATE:"+ymd,"DTEND;VALUE=DATE:"+ymd,
        "SUMMARY:Book "+p.name+" ("+net.short+")",
-       "DESCRIPTION:Your "+net.window+"-day booking window opens today. Reserve early—popular sites fill fast.",
+       "DESCRIPTION:Your "+eb.window+"-day booking window opens today. Reserve early—popular sites fill fast.",
        "END:VEVENT","END:VCALENDAR"].join("\n"));
     var a = document.createElement("a"); a.href = ics; a.download = "booking-reminder.ics";
     document.body.appendChild(a); a.click(); a.remove();
@@ -670,6 +713,7 @@
     var p = parkById(state.selected);
     if (!p){ state.selected=null; return exploreView(); }
     var net = NETWORKS[p.network];
+    var eb = effectiveBooking(p);
     var ci = cost(p);
     var locked = ci.tier==="locked";
     var head =
@@ -689,32 +733,37 @@
     }
 
     var arrival = state.dates.in ? new Date(state.dates.in+"T00:00:00") : null;
-    var openDate = (arrival && net.window) ? new Date(arrival.getTime() - net.window*86400000) : null;
+    var openDate = (arrival && eb.window) ? new Date(arrival.getTime() - eb.window*86400000) : null;
     var openIn = openDate ? Math.ceil((openDate - new Date(new Date().toDateString()))/86400000) : null;
     var nights = (state.dates.in && state.dates.out) ? Math.round((new Date(state.dates.out+"T00:00:00") - arrival)/86400000) : 0;
-    var overStay = net.maxStay && nights>net.maxStay;
+    var overStay = eb.maxDaysIn && nights>eb.maxDaysIn;
 
-    var rules = net.window
-      ? esc(net.short)+': up to '+net.maxStay+' nights · book up to '+net.window+' days out'
+    // tier-aware stay phrasing: park-to-park tiers move between parks; camping has a days-in/days-out cycle
+    var stayDesc = eb.tierAware
+      ? (eb.parkToPark ? eb.maxDaysIn+' days, move park-to-park' : eb.maxDaysIn+' days in / '+eb.daysOut+' days out')
+      : 'up to '+eb.maxDaysIn+' nights';
+    var tierNote = eb.tierAware ? ' · at your '+esc(perksTierLabel(eb.tierKey))+' tier' : '';
+    var rules = eb.window
+      ? esc(net.short)+': '+stayDesc+' · book up to '+eb.window+' days out'+tierNote
       : esc(net.short)+': no fixed booking window';
 
     var bw = "";
-    if (net.window && arrival && openIn!==null){
+    if (eb.window && arrival && openIn!==null){
       if (openIn>0){
         bw = '<div style="margin-top:12px;background:rgba(207,90,38,.08);border:1px solid '+C.ember+';border-radius:13px;padding:12px 14px">'+
           '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.ember+'">'+ic("calendar",17,C.ember)+'</span>'+
           '<span style="font-size:13.5px;font-weight:700">Booking opens in '+openIn+' day'+(openIn===1?"":"s")+'</span></div>'+
-          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">'+esc(net.short)+'’s '+net.window+'-day window for these dates opens '+fmtDate(openDate)+'. Popular parks book out the morning it opens — set a reminder.</div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">'+esc(net.short)+'’s '+eb.window+'-day window for these dates opens '+fmtDate(openDate)+'. Popular parks book out the morning it opens — set a reminder.</div>'+
           '<button class="btnP tap" data-act="remind" style="margin-top:10px">'+ic("bell",15,"#fff")+'Remind me '+fmtDate(openDate)+'</button></div>';
       } else {
         bw = '<div style="margin-top:12px;background:rgba(47,107,70,.10);border:1px solid '+C.green+';border-radius:13px;padding:12px 14px">'+
           '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.green+'">'+ic("calendar",17,C.green)+'</span>'+
           '<span style="font-size:13.5px;font-weight:700">Booking window is open now</span></div>'+
-          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">You’re inside '+esc(net.short)+'’s '+net.window+'-day window — reserve these dates before they fill.</div></div>';
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">You’re inside '+esc(net.short)+'’s '+eb.window+'-day window — reserve these dates before they fill.</div></div>';
       }
     }
     var stayWarn = overStay
-      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+net.maxStay+'-night max stay.</div>'
+      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+eb.maxDaysIn+'-night max stay.</div>'
       : "";
 
     var num = (state.profile.members && state.profile.members[p.network]) || "";
