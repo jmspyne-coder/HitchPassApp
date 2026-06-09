@@ -340,8 +340,11 @@
     q: "", netFilter: "", freeOnly: false,
     selected: null, dates: { in:"", out:"" },
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
-    tools: { city:"", radius:200, nights:30, perNight:55, dues:645 }
+    tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
+    addBooking: false,
+    bookingForm: freshBookingForm()
   };
+  function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
   if (!state.profile.members) state.profile.members = {};
   function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
 
@@ -364,6 +367,7 @@
     lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     chevron:'<path d="M9 6l6 6-6 6"/>',
     back:'<path d="M15 6l-6 6 6 6"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
     bell:'<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     ext:'<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 13v6H5V5h6"/>'
   };
@@ -594,66 +598,173 @@
       '<div style="font-size:13.5px;margin-top:8px;line-height:1.5">On the build queue. Validating earlier tabs first, then rebuilding this one against the spec.</div></div>';
   }
 
+  function tripRenders(t){ return !!(parkById(t.parkId) || t.parkName); }
+
   function tripCard(t, past){
-    var p = parkById(t.parkId); if (!p) return "";
-    var net = NETWORKS[p.network];
-    var ci = cost(p);
+    var p = parkById(t.parkId);
+    if (!p && !t.parkName) return "";           // orphan with no fallback name — drop (legacy behavior)
+    var name = p ? p.name : (t.parkName || "Saved trip");
+    var net = NETWORKS[t.network] || (p ? NETWORKS[p.network] : null);
     var nights = nightsBetween(t.dateIn, t.dateOut);
     var dateLine = (t.dateIn && t.dateOut)
       ? fmtDate(new Date(t.dateIn+"T00:00:00"))+" → "+fmtDate(new Date(t.dateOut+"T00:00:00"))+" · "+nights+" night"+(nights===1?"":"s")
       : "";
-    var bi = past ? null : bookingInfo(p, t.dateIn);
+
     var bw = "";
-    if (bi){
-      if (bi.openIn>0){
-        bw = '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-          '<span style="font-size:12px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:4px 10px;border-radius:999px">Books in '+bi.openIn+' day'+(bi.openIn===1?"":"s")+' · '+fmtDate(bi.openDate)+'</span>'+
-          '<button class="tap" data-act="trip-remind" data-arg="'+t.id+'" style="font-size:12px;font-weight:700;color:'+C.green+';display:inline-flex;align-items:center;gap:4px">'+ic("bell",13,C.green)+'Remind</button></div>';
-      } else {
-        bw = '<div style="margin-top:10px"><span style="font-size:12px;font-weight:700;color:'+C.green+';background:rgba(47,107,70,.12);padding:4px 10px;border-radius:999px">Booking open now</span></div>';
+    if (t.booked){
+      // booked reservation → check-in countdown (no booking-window math)
+      if (!past && t.dateIn){
+        var days = Math.ceil((new Date(t.dateIn+"T00:00:00") - new Date(new Date().toDateString()))/86400000);
+        var label = days>0 ? (days+" day"+(days===1?"":"s")+" until check-in") : (days===0 ? "Check in today" : "");
+        if (label) bw = '<div style="margin-top:10px"><span style="font-size:12px;font-weight:700;color:'+C.green+';background:rgba(47,107,70,.12);padding:4px 10px;border-radius:999px">'+label+'</span></div>';
+      }
+    } else if (p){
+      // existing planning trip → booking-window pill (unchanged)
+      var bi = past ? null : bookingInfo(p, t.dateIn);
+      if (bi){
+        if (bi.openIn>0){
+          bw = '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+            '<span style="font-size:12px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:4px 10px;border-radius:999px">Books in '+bi.openIn+' day'+(bi.openIn===1?"":"s")+' · '+fmtDate(bi.openDate)+'</span>'+
+            '<button class="tap" data-act="trip-remind" data-arg="'+t.id+'" style="font-size:12px;font-weight:700;color:'+C.green+';display:inline-flex;align-items:center;gap:4px">'+ic("bell",13,C.green)+'Remind</button></div>';
+        } else {
+          bw = '<div style="margin-top:10px"><span style="font-size:12px;font-weight:700;color:'+C.green+';background:rgba(47,107,70,.12);padding:4px 10px;border-radius:999px">Booking open now</span></div>';
+        }
       }
     }
-    var stayWarn = (net.maxStay && nights>net.maxStay)
+
+    var chips = "";
+    if (t.confirmation) chips += '<span style="font-size:11px;font-weight:700;color:'+C.green+';background:rgba(47,107,70,.10);padding:3px 9px;border-radius:999px">Conf# '+esc(t.confirmation)+'</span>';
+    var chipsRow = chips ? '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+chips+'</div>' : "";
+    var noteRow = t.note ? '<div style="margin-top:8px;font-size:12.5px;color:'+C.muted+';line-height:1.45">'+esc(t.note)+'</div>' : "";
+
+    var subLine = p ? (esc(p.city)+', '+esc(p.st)) : (net ? esc(net.name) : "Off-database park");
+    var shortChip = net ? '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>' : "";
+    var bookedChip = t.booked ? '<span style="font-size:10.5px;color:'+C.green+';font-weight:700;background:rgba(47,107,70,.12);padding:2px 7px;border-radius:6px">Booked</span>' : "";
+    var pillHTML = p ? pill(cost(p)) : "";
+
+    var stayWarn = (net && net.maxStay && nights>net.maxStay)
       ? '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12px;font-weight:600">'+ic("alert",13,C.clay)+nights+' nights exceeds '+esc(net.short)+'’s '+net.maxStay+'-night max.</div>'
       : "";
+
+    var actions = '<div style="display:flex;gap:8px;margin-top:12px">'+
+      (p ? '<button class="btnO tap" data-act="trip-view" data-arg="'+t.id+'" style="flex:1">View park</button>' : '')+
+      '<button class="tap" data-act="trip-remove" data-arg="'+t.id+'" style="'+(p?'padding:11px 14px':'flex:1;padding:11px;text-align:center')+';border-radius:11px;border:1px solid rgba(168,71,47,.3);color:'+C.clay+';font-weight:700;font-size:13px">Remove</button>'+
+      '</div>';
+
     return '<div class="tcard"'+(past?' style="opacity:.6"':'')+'>'+
       '<div style="display:flex;align-items:flex-start;gap:8px">'+
         '<div style="flex:1">'+
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-            '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
-            '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
+            '<span class="disp" style="font-size:17px;font-weight:800">'+esc(name)+'</span>'+
+            shortChip + bookedChip +
           '</div>'+
-          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+esc(p.city)+', '+esc(p.st)+'</div>'+
-        '</div>'+pill(ci)+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+subLine+'</div>'+
+        '</div>'+pillHTML+
       '</div>'+
       (dateLine? '<div style="font-size:13px;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px">'+ic("calendar",14,C.pine)+esc(dateLine)+'</div>':'')+
-      bw + stayWarn +
-      '<div style="display:flex;gap:8px;margin-top:12px">'+
-        '<button class="btnO tap" data-act="trip-view" data-arg="'+t.id+'" style="flex:1">View park</button>'+
-        '<button class="tap" data-act="trip-remove" data-arg="'+t.id+'" style="padding:11px 14px;border-radius:11px;border:1px solid rgba(168,71,47,.3);color:'+C.clay+';font-weight:700;font-size:13px">Remove</button>'+
-      '</div></div>';
+      bw + chipsRow + noteRow + stayWarn + actions +
+      '</div>';
   }
 
   function tripsView(){
+    if (state.addBooking) return bookingFormView();
     ensureTripIds();
     var today = todayLocalStr();
-    var trips = state.trips.slice().sort(function(a,b){ return (a.dateIn||"").localeCompare(b.dateIn||""); });
-    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Trips</div>';
+    var trips = state.trips.slice()
+      .filter(tripRenders)                       // count/show only trips that actually render
+      .sort(function(a,b){ return (a.dateIn||"").localeCompare(b.dateIn||""); });
+    var addBtn = '<button class="tap" data-act="add-booking" style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:'+C.ember+'">'+ic("plus",16,C.ember)+'Add a booking</button>';
+    var head = '<div style="padding:16px 16px 6px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+        '<div class="disp" style="font-size:24px;font-weight:800">Trips</div>'+addBtn+
+      '</div>';
     if (!trips.length){
       return head + '<div style="font-size:12.5px;color:'+C.muted+'">Your saved stays and booking windows</div></div>'+
         '<div style="padding:30px 24px;text-align:center;color:'+C.muted+'">'+ic("calendar",34,"#cdbfa6")+
         '<div style="font-size:15px;font-weight:700;color:'+C.ink+';margin-top:10px">No trips saved yet</div>'+
-        '<div style="font-size:13px;margin-top:6px;line-height:1.5">Find a park in Explore, pick your dates, and tap “Add to my trips” to track its booking window here.</div>'+
-        '<button class="btnG tap" data-act="nav" data-arg="explore" style="margin:16px auto 0;max-width:220px">Explore parks</button></div>';
+        '<div style="font-size:13px;margin-top:6px;line-height:1.5">Find a park in Explore to track its booking window, or log a reservation you’ve already made.</div>'+
+        '<button class="btnG tap" data-act="nav" data-arg="explore" style="margin:16px auto 0;max-width:220px">Explore parks</button>'+
+        '<button class="btnO tap" data-act="add-booking" style="margin:10px auto 0;max-width:220px">Add a booking</button></div>';
     }
     var upcoming = trips.filter(function(t){ return !t.dateOut || t.dateOut>=today; });
     var past = trips.filter(function(t){ return t.dateOut && t.dateOut<today; });
-    var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · booking windows tracked</div></div>'+
+    var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · windows &amp; check-ins tracked</div></div>'+
       '<div style="padding:6px 16px 8px">';
     html += upcoming.map(function(t){ return tripCard(t,false); }).join("");
     if (past.length){ html += '<div class="dlabel" style="margin:14px 2px 8px">Past</div>'+past.map(function(t){ return tripCard(t,true); }).join(""); }
     html += '</div>';
     return html;
+  }
+
+  function bookingResultsHTML(){
+    var f = state.bookingForm;
+    if (f.parkId) return "";
+    var q = (f.parkQuery||"").trim().toLowerCase();
+    if (!q) return "";
+    var matches = PARKS.filter(function(p){ return (p.name+" "+p.city+" "+p.st).toLowerCase().indexOf(q)>-1; }).slice(0,8);
+    if (!matches.length) return '<div style="font-size:12.5px;color:'+C.muted+';padding:8px 2px">No match — use “Not in the list?” below.</div>';
+    return '<div style="margin-top:6px;border:1px solid rgba(31,28,23,.1);border-radius:10px;overflow:hidden">'+
+      matches.map(function(p){
+        return '<button class="tap" data-act="booking-pick" data-arg="'+p.id+'" style="display:block;width:100%;text-align:left;padding:9px 12px;border-bottom:1px solid rgba(31,28,23,.06);background:#fff">'+
+          '<span style="font-weight:700;font-size:13.5px">'+esc(p.name)+'</span> '+
+          '<span style="font-size:12px;color:'+C.muted+'">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(NETWORKS[p.network].short)+'</span></button>';
+      }).join("")+'</div>';
+  }
+  function updateBookingResults(){ var b=document.getElementById("bookingResults"); if(b) b.innerHTML=bookingResultsHTML(); }
+
+  function bookingFormView(){
+    var f = state.bookingForm;
+    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Add a booking</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+'">Log a reservation you’ve already made</div></div>';
+    var parkSection;
+    if (!f.custom){
+      var picked = f.parkId ? parkById(f.parkId) : null;
+      parkSection = '<div class="dlabel">Park</div>'+
+        '<input id="bookingPark" class="dinput" type="text" value="'+esc(f.parkQuery)+'" placeholder="Search parks or cities" autocomplete="off" />'+
+        '<div id="bookingResults">'+bookingResultsHTML()+'</div>'+
+        (picked ? '<div style="font-size:12px;color:'+C.green+';font-weight:700;margin-top:7px">Selected: '+esc(picked.name)+' · '+esc(NETWORKS[picked.network].short)+'</div>' : '')+
+        '<button class="tap" data-act="booking-custom" style="font-size:12.5px;font-weight:700;color:'+C.green+';margin-top:9px">Not in the list? Enter it manually</button>';
+    } else {
+      var netOpts = Object.keys(NETWORKS).map(function(k){ return '<option value="'+k+'"'+(f.network===k?" selected":"")+'>'+esc(NETWORKS[k].name)+'</option>'; }).join("");
+      parkSection = '<div class="dlabel">Park name</div>'+
+        '<input class="dinput" data-booking="parkName" type="text" value="'+esc(f.parkName)+'" placeholder="Campground / resort name" autocomplete="off" />'+
+        '<div class="dlabel" style="margin-top:12px">Network</div>'+
+        '<select class="dinput" data-booking="network"><option value="">Select network</option>'+netOpts+'</select>'+
+        '<button class="tap" data-act="booking-search" style="font-size:12.5px;font-weight:700;color:'+C.green+';margin-top:9px">Search the list instead</button>';
+    }
+    return head + '<div class="det">'+
+      parkSection +
+      '<div style="display:flex;gap:10px;margin-top:14px">'+
+        '<div style="flex:1"><div class="dlabel">Arrival</div><input class="dinput" data-bdate="in" type="date" value="'+esc(f.dateIn)+'" /></div>'+
+        '<div style="flex:1"><div class="dlabel">Departure</div><input class="dinput" data-bdate="out" type="date" value="'+esc(f.dateOut)+'" /></div>'+
+      '</div>'+
+      '<div style="margin-top:12px"><div class="dlabel">Confirmation # (optional)</div><input class="dinput" data-booking="confirmation" type="text" value="'+esc(f.confirmation)+'" placeholder="e.g. TT-48217" autocomplete="off" /></div>'+
+      '<div style="margin-top:12px"><div class="dlabel">Notes (optional)</div><textarea class="dinput" data-booking="note" rows="3" placeholder="Site #, gate code, check-in time…" style="resize:vertical">'+esc(f.note)+'</textarea></div>'+
+      (f.error ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+esc(f.error)+'</div>' : '')+
+      '<button class="btnG tap" data-act="booking-save" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Save booking</button>'+
+      '<button class="btnO tap" data-act="booking-cancel" style="margin-top:10px">Cancel</button>'+
+      '</div>';
+  }
+
+  function saveBooking(){
+    var f = state.bookingForm;
+    var hasPark = f.custom ? (!!f.parkName.trim() && !!f.network) : (f.parkId!=null);
+    if (!hasPark){ f.error = f.custom ? "Enter a park name and pick a network." : "Search and pick a park, or use “Not in the list?”"; render(); return; }
+    if (!f.dateIn || !f.dateOut){ f.error = "Pick your arrival and departure dates."; render(); return; }
+    var network = f.custom ? f.network : (parkById(f.parkId)||{}).network;
+    state.trips.push({
+      id: Date.now(),
+      parkId: f.custom ? null : f.parkId,
+      parkName: f.custom ? f.parkName.trim() : undefined,
+      dateIn: f.dateIn, dateOut: f.dateOut,
+      network: network,
+      confirmation: f.confirmation.trim(),
+      note: f.note.trim(),
+      booked: true
+    });
+    persist();
+    state.addBooking=false; state.bookingForm=freshBookingForm();
+    state.tab="trips"; render();
   }
 
   function inputRow(attr, key, label, type, val, ph){
@@ -901,6 +1012,7 @@
     var act = el.getAttribute("data-act");
     var arg = el.getAttribute("data-arg");
     if (act==="nav"){
+      state.addBooking=false;
       if (arg==="explorefree"){ state.tab="explore"; state.selected=null; state.freeOnly=true; }
       else if (arg==="explore"){ state.tab="explore"; state.selected=null; }
       else { state.tab=arg; state.selected=null; }
@@ -931,6 +1043,12 @@
     else if (act==="set-tier"){ if (TIERS[arg]){ state.tier=arg; persist(); render(); } }
     else if (act==="tools-radius"){ state.tools.radius=parseInt(arg,10); render(); }
     else if (act==="send-referral"){ var su=buildReferralSMS(); if(su){ window.location.href=su; } }
+    else if (act==="add-booking"){ state.bookingForm=freshBookingForm(); state.addBooking=true; render(); }
+    else if (act==="booking-custom"){ state.bookingForm.custom=true; state.bookingForm.parkId=null; state.bookingForm.error=""; render(); }
+    else if (act==="booking-search"){ state.bookingForm.custom=false; state.bookingForm.error=""; render(); }
+    else if (act==="booking-pick"){ var bp=parkById(parseInt(arg,10)); if(bp){ var bf=state.bookingForm; bf.parkId=bp.id; bf.network=bp.network; bf.parkQuery=bp.name; bf.error=""; } render(); }
+    else if (act==="booking-cancel"){ state.addBooking=false; state.bookingForm=freshBookingForm(); render(); }
+    else if (act==="booking-save"){ saveBooking(); }
     else if (act==="trip-view"){ var tv=tripById(arg); if(tv){ state.tab="explore"; state.selected=tv.parkId; state.dates={in:tv.dateIn||"",out:tv.dateOut||""}; render(); } }
     else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
     else if (act==="trip-remove"){
@@ -950,10 +1068,18 @@
     if (mk){ if(!state.profile.members) state.profile.members={}; state.profile.members[mk]=t.value; persist(); return; }
     var tk = t.getAttribute("data-tools");
     if (tk){ state.tools[tk]=t.value; if(tk!=="city") updateSavings(); return; }
+    if (t.id==="bookingPark"){ state.bookingForm.parkQuery=t.value; state.bookingForm.parkId=null; updateBookingResults(); return; }
+    var bk = t.getAttribute("data-booking");
+    if (bk){ state.bookingForm[bk]=t.value; return; }
   });
   document.addEventListener("change", function(e){
-    var d = e.target && e.target.getAttribute ? e.target.getAttribute("data-date") : null;
-    if (d){ state.dates[d]=e.target.value; render(); }
+    var t = e.target; if (!t || !t.getAttribute) return;
+    var d = t.getAttribute("data-date");
+    if (d){ state.dates[d]=t.value; render(); return; }
+    var bd = t.getAttribute("data-bdate");
+    if (bd){ state.bookingForm[bd==="in"?"dateIn":"dateOut"]=t.value; return; }
+    var bk = t.getAttribute("data-booking");
+    if (bk){ state.bookingForm[bk]=t.value; return; }
   });
   document.addEventListener("keydown", function(e){
     if (e.key==="Enter" && !state.unlocked){ tryUnlock(); }
