@@ -88,6 +88,34 @@
     locked:     { bg:"rgba(134,125,108,.12)",fg:"#867d6c", label:"+"  }
   };
 
+  /* Membership tiers — "what I get" benefit sets, from verified membership
+     literature. Journey booking windows are NOT in the source → flagged. */
+  var TIERS = {
+    camping: { name:"Camping Pass", sub:"Regional membership", benefits:[
+      { label:"Nationwide camping", value:"Regional · 1 included region" },
+      { label:"Stays & booking",    value:"14 nights · 60-day window" },
+      { label:"Day-use privileges", value:"Included" },
+      { label:"Add more regions",   value:"$140 / yr each" }
+    ]},
+    adventure: { name:"Adventure", sub:"Full Thousand Trails access", benefits:[
+      { label:"Nationwide camping",        value:"All 82 Thousand Trails parks" },
+      { label:"Stays & booking",           value:"21 nights · 180-day window" },
+      { label:"RV site discounts",         value:"20% off daily rates" },
+      { label:"Cabins & getaways",         value:"Up to 50% off · $60 getaway cabins" },
+      { label:"Trails Collection+ (Encore)", value:"122 Encore resorts included" },
+      { label:"RPI condos",                value:"Trade a week for a condo worldwide" },
+      { label:"Family benefits",           value:"8 courtesy cards · 4 passes" },
+      { label:"Extension weeks",           value:"4 @ $29 + 2 @ $99 / yr" }
+    ]},
+    journey: { name:"Journey / Explore", sub:"Camping Pass + getaways", benefits:[
+      { label:"Nationwide camping", value:"Regional · 1 included region" },
+      { label:"Stays & booking",    value:"Confirm against your sheet", flag:true },
+      { label:"Day-use privileges", value:"Included" },
+      { label:"Cabins & getaways",  value:"Up to 50% off · $60 getaway cabins" },
+      { label:"Add more regions",   value:"$140 / yr each" }
+    ]}
+  };
+
   /* illustrative sample across networks/regions; swap for real export */
   var PARKS = [
     { id:1,   name:"Bend-Sunriver RV Campground", city:"Bend", st:"OR", region:"Northwest", network:"tt" },
@@ -306,11 +334,14 @@
     wallet: saved.wallet || ["tt","enc"],
     trips: saved.trips || [],
     profile: saved.profile || { members:{}, rigLength:null },
+    tier: saved.tier || "adventure",
     q: "", netFilter: "", freeOnly: false,
     selected: null, dates: { in:"", out:"" },
-    refer: { friendName:"", friendPhone:"", friendEmail:"" }
+    refer: { friendName:"", friendPhone:"", friendEmail:"" },
+    tools: { city:"", radius:200, nights:30, perNight:55, dues:645 }
   };
-  function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile }); }
+  if (!state.profile.members) state.profile.members = {};
+  function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
 
   var PASSCODE = "hitch";
 
@@ -627,13 +658,45 @@
       '<input class="dinput" '+attr+'="'+key+'" type="'+type+'" value="'+esc(val||"")+'" placeholder="'+esc(ph)+'" autocomplete="off" autocapitalize="words" /></div>';
   }
 
+  function walletCard(){
+    var members = state.profile.members || {};
+    var rows = Object.keys(NETWORKS).map(function(key){
+      var n = NETWORKS[key];
+      var held = state.wallet.indexOf(key) > -1;
+      var toggle = '<button class="fchip tap'+(held?" on":"")+'" data-act="wallet-toggle" data-arg="'+key+'">'+(held?"In wallet":"Add")+'</button>';
+      var row = '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(31,28,23,.07)">'+
+          '<div style="flex:1"><div style="font-size:14px;font-weight:700">'+esc(n.name)+'</div>'+
+            '<div style="font-size:11.5px;color:'+C.muted+'">'+n.count+' parks · '+esc(n.price)+'</div></div>'+
+          toggle+'</div>';
+      var numField = held ? inputRow("data-member",key,esc(n.short)+" member #","text",members[key],"Member number") : "";
+      return row + numField;
+    }).join("");
+    return '<div class="det">'+
+      '<div class="dlabel" style="font-size:12px">My wallet</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Toggle the memberships you hold — this drives your Home stats, park access, and rates. Add a member number for one-tap copy at booking.</div>'+
+      rows+'</div>';
+  }
+
+  function tierCard(){
+    var cur = state.tier || "adventure";
+    var chips = Object.keys(TIERS).map(function(k){
+      return '<button class="fchip tap'+(cur===k?" on":"")+'" data-act="set-tier" data-arg="'+k+'">'+esc(TIERS[k].name)+'</button>';
+    }).join("");
+    return '<div class="det">'+
+      '<div class="dlabel" style="font-size:12px">Membership tier</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Sets which benefits show in the Perks tab.</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+'</div></div>';
+  }
+
   function profileView(){
     var prof = state.profile;
     return ''+
       '<div style="padding:16px 16px 6px">'+
         '<div class="disp" style="font-size:24px;font-weight:800">Profile</div>'+
-        '<div style="font-size:12.5px;color:'+C.muted+'">Your details and referral setup</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">Your wallet, tier, and referral setup</div>'+
       '</div>'+
+      walletCard()+
+      tierCard()+
       '<div class="det">'+
         '<div class="dlabel" style="font-size:12px">Referral setup</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Saved on this device. Used to pre-write referral texts from you to your salesperson.</div>'+
@@ -641,6 +704,82 @@
         inputRow("data-profile","salesName","Salesperson name","text",prof.salesName,"e.g. Chris Rivera")+
         inputRow("data-profile","salesPhone","Salesperson mobile","tel",prof.salesPhone,"(555) 123-4567")+
       '</div>';
+  }
+
+  function perksView(){
+    var tkey = state.tier || "adventure";
+    var t = TIERS[tkey] || TIERS.adventure;
+    var rows = t.benefits.map(function(b){
+      var val = b.flag
+        ? '<span style="font-size:11.5px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 9px;border-radius:999px">'+esc(b.value)+'</span>'
+        : '<span style="font-size:12.5px;color:'+C.muted+';font-weight:600;text-align:right">'+esc(b.value)+'</span>';
+      return '<button class="tap" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 0;border-top:1px solid rgba(31,28,23,.07)">'+
+        '<span style="flex:1;font-size:14px;font-weight:700;min-width:38%">'+esc(b.label)+'</span>'+
+        val+ic("chevron",16,C.muted)+'</button>';
+    }).join("");
+    return ''+
+      '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Perks</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">What your '+esc(t.name)+' membership includes</div></div>'+
+      '<div class="det">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+          '<div class="dlabel" style="font-size:12px">'+esc(t.name)+' · '+esc(t.sub)+'</div>'+
+          '<button class="tap" data-act="nav" data-arg="profile" style="font-size:12px;font-weight:700;color:'+C.green+'">Change tier</button>'+
+        '</div>'+ rows +
+      '</div>'+
+      '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;padding:0 24px 16px;line-height:1.5">Benefits reflect published membership literature — confirm specifics on your agreement before quoting a prospect.</div>';
+  }
+
+  function savingsCalc(){
+    var tl = state.tools;
+    var nights = Math.max(0, parseFloat(tl.nights) || 0);
+    var per = Math.max(0, parseFloat(tl.perNight) || 0);
+    var dues = Math.max(0, parseFloat(tl.dues) || 0);
+    return { net: nights*per - dues, payN: per>0 ? Math.ceil(dues/per) : null };
+  }
+  function fmtMoney(n){ return (n<0?"-":"")+"$"+Math.abs(Math.round(n)).toLocaleString("en-US"); }
+  function savingsHTML(){
+    var c = savingsCalc();
+    var col = c.net>=0 ? C.green : C.clay;
+    return '<div style="text-align:center">'+
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:'+C.muted+';text-transform:uppercase">Net savings / year</div>'+
+      '<div class="disp" style="font-size:38px;font-weight:800;color:'+col+';line-height:1.1;margin-top:3px">'+fmtMoney(c.net)+'</div>'+
+      (c.payN!==null
+        ? '<div style="font-size:12.5px;color:'+C.muted+';margin-top:4px">Pays for itself at '+c.payN+' night'+(c.payN===1?"":"s")+'</div>'
+        : '<div style="font-size:12.5px;color:'+C.muted+';margin-top:4px">Enter a nightly rate to see the break-even</div>')+
+      '</div>';
+  }
+  function updateSavings(){ var b = document.getElementById("savingsBox"); if (b) b.innerHTML = savingsHTML(); }
+
+  function toolsView(){
+    var tl = state.tools;
+    var chips = [50,100,200,300].map(function(r){
+      return '<button class="fchip tap'+(Number(tl.radius)===r?" on":"")+'" data-act="tools-radius" data-arg="'+r+'">'+r+' mi</button>';
+    }).join("");
+    var coverageNote = (tl.city && tl.city.trim())
+      ? 'Searching within '+esc(String(tl.radius))+' mi of '+esc(tl.city)+'. Live park-distance matching isn’t wired up yet — this sets the search, not results.'
+      : 'Enter a prospect’s city and pick a radius. Live distance matching needs a location data source (not wired up yet), so this configures the search only.';
+    function numField(label,key,val){
+      return '<div style="margin-top:12px"><div class="dlabel">'+label+'</div>'+
+        '<input class="dinput" data-tools="'+key+'" type="number" inputmode="numeric" value="'+esc(String(val))+'" /></div>';
+    }
+    return ''+
+      '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Coverage &amp; savings</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">A quick pitch tool</div></div>'+
+      '<div class="det">'+
+        '<div class="dlabel" style="font-size:12px">Coverage near a prospect</div>'+
+        '<input class="dinput" data-tools="city" type="text" value="'+esc(tl.city)+'" placeholder="City, ST" style="margin-top:10px" autocapitalize="words" />'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+'</div>'+
+        '<div style="font-size:12px;color:'+C.muted+';margin-top:11px;line-height:1.5">'+coverageNote+'</div>'+
+      '</div>'+
+      '<div class="det">'+
+        '<div class="dlabel" style="font-size:12px">Does it pay for itself?</div>'+
+        numField("Nights / year","nights",tl.nights)+
+        numField("$ / night otherwise","perNight",tl.perNight)+
+        numField("Annual dues ($)","dues",tl.dues)+
+        '<div id="savingsBox" style="margin-top:16px">'+savingsHTML()+'</div>'+
+        '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;margin-top:11px;line-height:1.5">Rough estimate — excludes the $20/night and paid-network parks.</div>'+
+      '</div>'+
+      '<div style="padding:0 16px 16px"><button class="btnG tap" data-act="nav" data-arg="home">Back to home</button></div>';
   }
 
   /* Build the SMS deep link addressed to the salesperson, prefilled in first
@@ -730,11 +869,11 @@
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
-    else if (state.tab==="tools"){ body = stubView("Coverage &amp; savings"); }
+    else if (state.tab==="tools"){ body = toolsView(); }
     else if (state.tab==="trips"){ body = tripsView(); }
     else if (state.tab==="refer"){ body = referView(); }
     else if (state.tab==="profile"){ body = profileView(); }
-    else if (state.tab==="perks"){ body = stubView("Perks"); }
+    else if (state.tab==="perks"){ body = perksView(); }
     else { body = homeView(); }
     app.innerHTML = '<div class="wrap">'+
       '<div class="ribbon">'+ic("alert",14,"#e0875a")+'<span>Unofficial · made by a customer, not by Thousand Trails / Encore / ELS · all names are trademarks of their owners</span></div>'+
@@ -779,6 +918,13 @@
       persist();
       state.tab="trips"; state.selected=null; render();
     }
+    else if (act==="wallet-toggle"){
+      var wi=state.wallet.indexOf(arg);
+      if (wi>-1) state.wallet.splice(wi,1); else state.wallet.push(arg);
+      persist(); render();
+    }
+    else if (act==="set-tier"){ if (TIERS[arg]){ state.tier=arg; persist(); render(); } }
+    else if (act==="tools-radius"){ state.tools.radius=parseInt(arg,10); render(); }
     else if (act==="send-referral"){ var su=buildReferralSMS(); if(su){ window.location.href=su; } }
     else if (act==="trip-view"){ var tv=tripById(arg); if(tv){ state.tab="explore"; state.selected=tv.parkId; state.dates={in:tv.dateIn||"",out:tv.dateOut||""}; render(); } }
     else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
@@ -795,6 +941,10 @@
     if (rk){ state.refer[rk]=t.value; updateReferBtn(); return; }
     var pk = t.getAttribute("data-profile");
     if (pk){ state.profile[pk]=t.value; persist(); return; }
+    var mk = t.getAttribute("data-member");
+    if (mk){ if(!state.profile.members) state.profile.members={}; state.profile.members[mk]=t.value; persist(); return; }
+    var tk = t.getAttribute("data-tools");
+    if (tk){ state.tools[tk]=t.value; if(tk!=="city") updateSavings(); return; }
   });
   document.addEventListener("change", function(e){
     var d = e.target && e.target.getAttribute ? e.target.getAttribute("data-date") : null;
