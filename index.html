@@ -307,7 +307,8 @@
     trips: saved.trips || [],
     profile: saved.profile || { members:{}, rigLength:null },
     q: "", netFilter: "", freeOnly: false,
-    selected: null, dates: { in:"", out:"" }
+    selected: null, dates: { in:"", out:"" },
+    refer: { friendName:"", friendPhone:"", friendEmail:"" }
   };
   function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile }); }
 
@@ -621,6 +622,91 @@
     return html;
   }
 
+  function inputRow(attr, key, label, type, val, ph){
+    return '<div style="margin-top:12px"><div class="dlabel">'+label+'</div>'+
+      '<input class="dinput" '+attr+'="'+key+'" type="'+type+'" value="'+esc(val||"")+'" placeholder="'+esc(ph)+'" autocomplete="off" autocapitalize="words" /></div>';
+  }
+
+  function profileView(){
+    var prof = state.profile;
+    return ''+
+      '<div style="padding:16px 16px 6px">'+
+        '<div class="disp" style="font-size:24px;font-weight:800">Profile</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">Your details and referral setup</div>'+
+      '</div>'+
+      '<div class="det">'+
+        '<div class="dlabel" style="font-size:12px">Referral setup</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Saved on this device. Used to pre-write referral texts from you to your salesperson.</div>'+
+        inputRow("data-profile","fullName","Your name","text",prof.fullName,"Your full name")+
+        inputRow("data-profile","salesName","Salesperson name","text",prof.salesName,"e.g. Chris Rivera")+
+        inputRow("data-profile","salesPhone","Salesperson mobile","tel",prof.salesPhone,"(555) 123-4567")+
+      '</div>';
+  }
+
+  /* Build the SMS deep link addressed to the salesperson, prefilled in first
+     person as the account holder. Returns null if required fields are missing. */
+  function buildReferralSMS(){
+    var prof = state.profile, r = state.refer;
+    var sales = prof.salesPhone ? String(prof.salesPhone).replace(/[^\d+]/g,"") : "";
+    var friendName = (r.friendName||"").trim();
+    var friendPhone = (r.friendPhone||"").trim();
+    if (!sales || !friendName || !friendPhone) return null;
+    var salesName = (prof.salesName||"there").trim();
+    var yourName = (prof.fullName||"").trim();
+    var friendEmail = (r.friendEmail||"").trim();
+    var intro = yourName ? ("Hey "+salesName+", it's "+yourName+".") : ("Hey "+salesName+".");
+    var body = intro+" I'm referring a friend — "+friendName+". Their number is "+friendPhone+
+      (friendEmail ? " and email is "+friendEmail : "")+
+      ". They're expecting you to reach out. Thanks!";
+    return "sms:"+sales+"?&body="+encodeURIComponent(body);
+  }
+
+  function referCanSend(){
+    var r = state.refer;
+    var hasSales = !!(state.profile.salesPhone && String(state.profile.salesPhone).trim());
+    return hasSales && !!(r.friendName||"").trim() && !!(r.friendPhone||"").trim();
+  }
+  function updateReferBtn(){
+    var b = document.getElementById("sendReferral"); if (!b) return;
+    var can = referCanSend();
+    b.disabled = !can;
+    b.style.opacity = can ? "1" : ".45";
+    b.style.pointerEvents = can ? "auto" : "none";
+  }
+
+  function referView(){
+    var prof = state.profile, r = state.refer;
+    var hasSales = !!(prof.salesPhone && String(prof.salesPhone).trim());
+    var head =
+      '<div style="padding:16px 16px 6px">'+
+        '<div class="disp" style="font-size:24px;font-weight:800">Refer a friend</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">Send to your agent</div>'+
+      '</div>';
+
+    if (!hasSales){
+      return head +
+        '<button class="det tap" data-act="nav" data-arg="profile" style="display:block;text-align:left;cursor:pointer">'+
+          '<div style="display:flex;align-items:flex-start;gap:10px">'+
+            '<span style="color:'+C.ember+';flex-shrink:0;margin-top:1px">'+ic("alert",18,C.ember)+'</span>'+
+            '<div style="font-size:14px;font-weight:700;color:'+C.ink+';line-height:1.45">Add your salesperson’s info in Profile first'+
+              '<div style="font-size:12.5px;font-weight:500;color:'+C.muted+';margin-top:4px">We text the referral straight to them from your phone.</div></div>'+
+            '<span style="margin-left:auto;align-self:center">'+ic("chevron",18,C.muted)+'</span>'+
+          '</div>'+
+        '</button>';
+    }
+
+    var can = referCanSend();
+    return head +
+      '<div class="det">'+
+        '<div style="font-size:12.5px;color:'+C.muted+';line-height:1.5;margin-bottom:4px">Fill in your friend’s details — hand them your phone for this part if you like. The text sends from your number to '+esc((prof.salesName||"your salesperson").trim())+'.</div>'+
+        inputRow("data-refer","friendName","Friend’s name","text",r.friendName,"Jane Camper")+
+        inputRow("data-refer","friendPhone","Friend’s mobile","tel",r.friendPhone,"(555) 123-4567")+
+        inputRow("data-refer","friendEmail","Friend’s email (optional)","email",r.friendEmail,"jane@email.com")+
+        '<button id="sendReferral" class="btnP tap" data-act="send-referral" style="margin-top:16px'+(can?"":";opacity:.45;pointer-events:none")+'"'+(can?"":" disabled")+'>'+ic("share",15,"#fff")+'Send referral text</button>'+
+        '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;margin-top:10px;line-height:1.5">Opens your Messages app with the note pre-written — you review, then hit send.</div>'+
+      '</div>';
+  }
+
   function navView(){
     return '<div class="nav">'+NAV.map(function(n){
       var on = (state.tab===n[0] || (n[0]==="explore" && state.tab==="explore")) ? " on" : "";
@@ -646,8 +732,8 @@
     else if (state.tab==="home"){ body = homeView(); }
     else if (state.tab==="tools"){ body = stubView("Coverage &amp; savings"); }
     else if (state.tab==="trips"){ body = tripsView(); }
-    else if (state.tab==="refer"){ body = stubView("Refer a friend"); }
-    else if (state.tab==="profile"){ body = stubView("Profile"); }
+    else if (state.tab==="refer"){ body = referView(); }
+    else if (state.tab==="profile"){ body = profileView(); }
     else if (state.tab==="perks"){ body = stubView("Perks"); }
     else { body = homeView(); }
     app.innerHTML = '<div class="wrap">'+
@@ -693,6 +779,7 @@
       persist();
       state.tab="trips"; state.selected=null; render();
     }
+    else if (act==="send-referral"){ var su=buildReferralSMS(); if(su){ window.location.href=su; } }
     else if (act==="trip-view"){ var tv=tripById(arg); if(tv){ state.tab="explore"; state.selected=tv.parkId; state.dates={in:tv.dateIn||"",out:tv.dateOut||""}; render(); } }
     else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
     else if (act==="trip-remove"){
@@ -702,7 +789,12 @@
     }
   });
   document.addEventListener("input", function(e){
-    if (e.target && e.target.id==="q"){ state.q=e.target.value; var l=document.getElementById("plist"); if(l) l.innerHTML=listHTML(); }
+    var t = e.target; if (!t || !t.getAttribute) return;
+    if (t.id==="q"){ state.q=t.value; var l=document.getElementById("plist"); if(l) l.innerHTML=listHTML(); return; }
+    var rk = t.getAttribute("data-refer");
+    if (rk){ state.refer[rk]=t.value; updateReferBtn(); return; }
+    var pk = t.getAttribute("data-profile");
+    if (pk){ state.profile[pk]=t.value; persist(); return; }
   });
   document.addEventListener("change", function(e){
     var d = e.target && e.target.getAttribute ? e.target.getAttribute("data-date") : null;
