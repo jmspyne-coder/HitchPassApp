@@ -120,88 +120,88 @@
 
   /* illustrative sample across networks/regions; swap for real export */
   var PARKS = [
-    { id:1,   name:"Bend-Sunriver RV Campground", city:"Bend", st:"OR", region:"Northwest", network:"tt" },
-    { id:2,   name:"Pacific City RV & Camping Resort", city:"Cloverdale", st:"OR", region:"Northwest", network:"tt" },
-    { id:3,   name:"Seaside RV Resort", city:"Seaside", st:"OR", region:"Northwest", network:"tt" },
-    { id:4,   name:"Whalers Rest RV & Camping Resort", city:"South Beach", st:"OR", region:"Northwest", network:"tt" },
-    { id:5,   name:"South Jetty RV & Camping Resort", city:"Florence", st:"OR", region:"Northwest", network:"tt" },
-    { id:6,   name:"La Conner RV & Camping Resort", city:"La Conner", st:"WA", region:"Northwest", network:"tt" },
-    { id:7,   name:"Grandy Creek RV Campground", city:"Concrete", st:"WA", region:"Northwest", network:"tt" },
-    { id:8,   name:"Crescent Bar RV Resort", city:"Quincy", st:"WA", region:"Northwest", network:"tt" },
-    { id:9,   name:"Chehalis RV & Camping Resort", city:"Chehalis", st:"WA", region:"Northwest", network:"tt" },
-    { id:10,  name:"Birch Bay RV Campground", city:"Blaine", st:"WA", region:"Northwest", network:"tt" },
-    { id:11,  name:"Leavenworth RV Campground", city:"Leavenworth", st:"WA", region:"Northwest", network:"tt" },
-    { id:12,  name:"Little Diamond RV Campground", city:"Newport", st:"WA", region:"Northwest", network:"tt" },
-    { id:13,  name:"Long Beach RV & Camping Resort", city:"Seaview", st:"WA", region:"Northwest", network:"tt" },
-    { id:14,  name:"Thunderbird RV & Camping Resort", city:"Monroe", st:"WA", region:"Northwest", network:"tt" },
-    { id:15,  name:"Paradise RV Campground", city:"Silver Creek", st:"WA", region:"Northwest", network:"tt" },
-    { id:16,  name:"Oceana RV & Camping Resort", city:"Ocean City", st:"WA", region:"Northwest", network:"tt" },
-    { id:17,  name:"Mount Vernon RV Campground", city:"Bow", st:"WA", region:"Northwest", network:"tt" },
+    { id:1,   name:"Bend-Sunriver RV Campground", city:"Bend", st:"OR", region:"Northwest", network:"tt", lat:44.05817, lng:-121.31531 },
+    { id:2,   name:"Pacific City RV & Camping Resort", city:"Cloverdale", st:"OR", region:"Northwest", network:"tt", lat:45.2016, lng:-123.88509 },
+    { id:3,   name:"Seaside RV Resort", city:"Seaside", st:"OR", region:"Northwest", network:"tt", lat:45.99325, lng:-123.92021 },
+    { id:4,   name:"Whalers Rest RV & Camping Resort", city:"South Beach", st:"OR", region:"Northwest", network:"tt", lat:44.61233, lng:-124.04874 },
+    { id:5,   name:"South Jetty RV & Camping Resort", city:"Florence", st:"OR", region:"Northwest", network:"tt", lat:43.98001, lng:-124.10131 },
+    { id:6,   name:"La Conner RV & Camping Resort", city:"La Conner", st:"WA", region:"Northwest", network:"tt", lat:48.39189, lng:-122.49425 },
+    { id:7,   name:"Grandy Creek RV Campground", city:"Concrete", st:"WA", region:"Northwest", network:"tt", lat:48.53893, lng:-121.74693 },
+    { id:8,   name:"Crescent Bar RV Resort", city:"Quincy", st:"WA", region:"Northwest", network:"tt", lat:47.23437, lng:-119.85351 },
+    { id:9,   name:"Chehalis RV & Camping Resort", city:"Chehalis", st:"WA", region:"Northwest", network:"tt", lat:46.65997, lng:-122.96343 },
+    { id:10,  name:"Birch Bay RV Campground", city:"Blaine", st:"WA", region:"Northwest", network:"tt", lat:48.98811, lng:-122.74358 },
+    { id:11,  name:"Leavenworth RV Campground", city:"Leavenworth", st:"WA", region:"Northwest", network:"tt", lat:47.59691, lng:-120.66108 },
+    { id:12,  name:"Little Diamond RV Campground", city:"Newport", st:"WA", region:"Northwest", network:"tt", lat:48.17963, lng:-117.04326 },
+    { id:13,  name:"Long Beach RV & Camping Resort", city:"Seaview", st:"WA", region:"Northwest", network:"tt", lat:46.33454, lng:-124.0546 },
+    { id:14,  name:"Thunderbird RV & Camping Resort", city:"Monroe", st:"WA", region:"Northwest", network:"tt", lat:47.85523, lng:-121.97133 },
+    { id:15,  name:"Paradise RV Campground", city:"Silver Creek", st:"WA", region:"Northwest", network:"tt", lat:46.52539, lng:-122.59048 },
+    { id:16,  name:"Oceana RV & Camping Resort", city:"Ocean City", st:"WA", region:"Northwest", network:"tt", lat:47.07098, lng:-124.16271 },
+    { id:17,  name:"Mount Vernon RV Campground", city:"Bow", st:"WA", region:"Northwest", network:"tt", lat:48.56113, lng:-122.40806 },
     { id:18,  name:"Cultus Lake RV Resort", city:"Lindell Beach", st:"BC", region:"Northwest", network:"tt" },
-    { id:19,  name:"Moody Beach RV Campground", city:"Wells", st:"ME", region:"Northeast", network:"tt" },
-    { id:20,  name:"Sturbridge RV Resort", city:"Sturbridge", st:"MA", region:"Northeast", network:"tt" },
-    { id:21,  name:"Gateway to Cape Cod", city:"Rochester", st:"MA", region:"Northeast", network:"tt" },
-    { id:22,  name:"Sea Pines RV Resort & Campground", city:"Swainton", st:"NJ", region:"Northeast", network:"tt" },
-    { id:23,  name:"Lake & Shore RV Resort", city:"Ocean View", st:"NJ", region:"Northeast", network:"tt" },
-    { id:24,  name:"Chestnut Lake RV Campground", city:"Port Republic", st:"NJ", region:"Northeast", network:"tt" },
-    { id:25,  name:"Rondout Valley RV Campground", city:"Accord", st:"NY", region:"Northeast", network:"tt" },
-    { id:26,  name:"Scotrun RV Resort", city:"Scotrun", st:"PA", region:"Northeast", network:"tt" },
-    { id:27,  name:"PA Dutch Country RV Resort", city:"Manheim", st:"PA", region:"Northeast", network:"tt" },
-    { id:28,  name:"Hershey RV & Camping Resort", city:"Lebanon", st:"PA", region:"Northeast", network:"tt" },
-    { id:29,  name:"Gettysburg Farm RV Campground", city:"Dover", st:"PA", region:"Northeast", network:"tt" },
-    { id:30,  name:"Circle M RV & Camping Resort", city:"Lancaster", st:"PA", region:"Northeast", network:"tt" },
-    { id:31,  name:"Timothy Lake South RV", city:"East Stroudsburg", st:"PA", region:"Northeast", network:"tt" },
-    { id:32,  name:"Timothy Lake North RV", city:"East Stroudsburg", st:"PA", region:"Northeast", network:"tt" },
-    { id:33,  name:"Medina Lake RV Campground", city:"Lakehills", st:"TX", region:"Southeast", network:"tt" },
-    { id:34,  name:"Colorado River RV Campground", city:"Columbus", st:"TX", region:"Southeast", network:"tt" },
-    { id:35,  name:"Lake Conroe RV & Camping Resort", city:"Willis", st:"TX", region:"Southeast", network:"tt" },
-    { id:36,  name:"Lake Whitney RV Campground", city:"Whitney", st:"TX", region:"Southeast", network:"tt" },
-    { id:37,  name:"Bay Landing RV Campground", city:"Bridgeport", st:"TX", region:"Southeast", network:"tt" },
-    { id:38,  name:"Lake Texoma RV Campground", city:"Gordonville", st:"TX", region:"Southeast", network:"tt" },
-    { id:39,  name:"Lake Tawakoni RV Campground", city:"Point", st:"TX", region:"Southeast", network:"tt" },
-    { id:40,  name:"Cherokee Landing Campground", city:"Middleton", st:"TN", region:"Southeast", network:"tt" },
-    { id:41,  name:"Natchez Trace RV Campground", city:"Hohenwald", st:"TN", region:"Southeast", network:"tt" },
-    { id:42,  name:"Hidden Cove Resort", city:"Arley", st:"AL", region:"Southeast", network:"tt" },
-    { id:43,  name:"Carolina Landing RV Resort", city:"Fair Play", st:"SC", region:"Southeast", network:"tt" },
-    { id:44,  name:"The Oaks at Point South RV", city:"Yemassee", st:"SC", region:"Southeast", network:"tt" },
-    { id:45,  name:"Green Mountain Park", city:"Lenoir", st:"NC", region:"Southeast", network:"tt" },
-    { id:46,  name:"Forest Lake RV & Camping Resort", city:"Advance", st:"NC", region:"Southeast", network:"tt" },
-    { id:47,  name:"Lake Gaston RV & Camping Resort", city:"Littleton", st:"NC", region:"Southeast", network:"tt" },
-    { id:48,  name:"Lynchburg RV Resort", city:"Gladys", st:"VA", region:"Southeast", network:"tt" },
-    { id:49,  name:"Williamsburg RV & Camping Resort", city:"Williamsburg", st:"VA", region:"Southeast", network:"tt" },
-    { id:50,  name:"Harbor View RV & Camping Resort", city:"Colonial Beach", st:"VA", region:"Southeast", network:"tt" },
-    { id:51,  name:"Chesapeake Bay RV Resort", city:"Gloucester", st:"VA", region:"Southeast", network:"tt" },
-    { id:52,  name:"Virginia Landing RV Campground", city:"Quinby", st:"VA", region:"Southeast", network:"tt" },
-    { id:53,  name:"Three Flags RV Campground", city:"Wildwood", st:"FL", region:"Southeast", network:"tt" },
-    { id:54,  name:"Orlando RV Resort", city:"Clermont", st:"FL", region:"Southeast", network:"tt" },
-    { id:55,  name:"Peace River RV & Camping Resort", city:"Wauchula", st:"FL", region:"Southeast", network:"tt" },
-    { id:56,  name:"Verde Valley RV & Camping Resort", city:"Cottonwood", st:"AZ", region:"Southwest", network:"tt" },
-    { id:57,  name:"Snowflower RV Resort", city:"Emigrant Gap", st:"CA", region:"Southwest", network:"tt" },
-    { id:58,  name:"Lake of the Springs RV Resort", city:"Oregon House", st:"CA", region:"Southwest", network:"tt" },
-    { id:59,  name:"Lake Minden RV Resort", city:"Nicolaus", st:"CA", region:"Southwest", network:"tt" },
-    { id:60,  name:"Idyllwild RV Resort", city:"Idyllwild", st:"CA", region:"Southwest", network:"tt" },
-    { id:61,  name:"Morgan Hill RV Resort", city:"Morgan Hill", st:"CA", region:"Southwest", network:"tt" },
-    { id:62,  name:"Oakzanita Springs RV Campground", city:"Descanso", st:"CA", region:"Southwest", network:"tt" },
-    { id:63,  name:"San Benito RV & Camping Resort", city:"Paicines", st:"CA", region:"Southwest", network:"tt" },
-    { id:64,  name:"Russian River RV Campground", city:"Cloverdale", st:"CA", region:"Southwest", network:"tt" },
-    { id:65,  name:"Rancho Oso RV & Camping Resort", city:"Santa Barbara", st:"CA", region:"Southwest", network:"tt" },
-    { id:66,  name:"Ponderosa RV Resort", city:"Lotus", st:"CA", region:"Southwest", network:"tt" },
-    { id:67,  name:"Pio Pico RV Resort & Campground", city:"Jamul", st:"CA", region:"Southwest", network:"tt" },
-    { id:68,  name:"Palm Springs RV Resort", city:"Palm Desert", st:"CA", region:"Southwest", network:"tt" },
-    { id:69,  name:"Yosemite Lakes RV Resort", city:"Groveland", st:"CA", region:"Southwest", network:"tt" },
-    { id:70,  name:"Wilderness Lakes RV Resort", city:"Menifee", st:"CA", region:"Southwest", network:"tt" },
-    { id:71,  name:"Turtle Beach RV Resort", city:"Manteca", st:"CA", region:"Southwest", network:"tt" },
-    { id:72,  name:"Soledad Canyon RV & Camping Resort", city:"Acton", st:"CA", region:"Southwest", network:"tt" },
-    { id:73,  name:"Blue Mesa Recreational Ranch", city:"Gunnison", st:"CO", region:"Southwest", network:"tt" },
-    { id:74,  name:"Las Vegas RV Resort", city:"Las Vegas", st:"NV", region:"Southwest", network:"tt" },
-    { id:75,  name:"Pine Country RV & Camping Resort", city:"Belvidere", st:"IL", region:"Midwest", network:"tt" },
-    { id:76,  name:"Indian Lakes RV Campground", city:"Batesville", st:"IN", region:"Midwest", network:"tt" },
-    { id:77,  name:"Horseshoe Lakes RV Campground", city:"Clinton", st:"IN", region:"Midwest", network:"tt" },
-    { id:78,  name:"Diamond Caverns RV & Golf Club", city:"Park City", st:"KY", region:"Midwest", network:"tt" },
-    { id:79,  name:"Bear Cave RV Campground", city:"Buchanan", st:"MI", region:"Midwest", network:"tt" },
-    { id:80,  name:"St Clair RV Resort", city:"Saint Clair", st:"MI", region:"Midwest", network:"tt" },
-    { id:81,  name:"Wilmington RV Resort", city:"Wilmington", st:"OH", region:"Midwest", network:"tt" },
-    { id:82,  name:"Kenisee Lake RV Campground", city:"Jefferson", st:"OH", region:"Midwest", network:"tt" },
+    { id:19,  name:"Moody Beach RV Campground", city:"Wells", st:"ME", region:"Northeast", network:"tt", lat:43.32205, lng:-70.58074 },
+    { id:20,  name:"Sturbridge RV Resort", city:"Sturbridge", st:"MA", region:"Northeast", network:"tt", lat:42.10844, lng:-72.08078 },
+    { id:21,  name:"Gateway to Cape Cod", city:"Rochester", st:"MA", region:"Northeast", network:"tt", lat:41.73172, lng:-70.8203 },
+    { id:22,  name:"Sea Pines RV Resort & Campground", city:"Swainton", st:"NJ", region:"Northeast", network:"tt", lat:39.1315, lng:-74.77739 },
+    { id:23,  name:"Lake & Shore RV Resort", city:"Ocean View", st:"NJ", region:"Northeast", network:"tt", lat:39.19147, lng:-74.73203 },
+    { id:24,  name:"Chestnut Lake RV Campground", city:"Port Republic", st:"NJ", region:"Northeast", network:"tt", lat:39.52067, lng:-74.48571 },
+    { id:25,  name:"Rondout Valley RV Campground", city:"Accord", st:"NY", region:"Northeast", network:"tt", lat:41.79812, lng:-74.2293 },
+    { id:26,  name:"Scotrun RV Resort", city:"Scotrun", st:"PA", region:"Northeast", network:"tt", lat:41.06592, lng:-75.31991 },
+    { id:27,  name:"PA Dutch Country RV Resort", city:"Manheim", st:"PA", region:"Northeast", network:"tt", lat:40.16374, lng:-76.39524 },
+    { id:28,  name:"Hershey RV & Camping Resort", city:"Lebanon", st:"PA", region:"Northeast", network:"tt", lat:40.37571, lng:-76.46261 },
+    { id:29,  name:"Gettysburg Farm RV Campground", city:"Dover", st:"PA", region:"Northeast", network:"tt", lat:40.00145, lng:-76.84733 },
+    { id:30,  name:"Circle M RV & Camping Resort", city:"Lancaster", st:"PA", region:"Northeast", network:"tt", lat:40.038, lng:-76.30567 },
+    { id:31,  name:"Timothy Lake South RV", city:"East Stroudsburg", st:"PA", region:"Northeast", network:"tt", lat:40.99954, lng:-75.18129 },
+    { id:32,  name:"Timothy Lake North RV", city:"East Stroudsburg", st:"PA", region:"Northeast", network:"tt", lat:40.99954, lng:-75.18129 },
+    { id:33,  name:"Medina Lake RV Campground", city:"Lakehills", st:"TX", region:"Southeast", network:"tt", lat:29.5844, lng:-98.94892 },
+    { id:34,  name:"Colorado River RV Campground", city:"Columbus", st:"TX", region:"Southeast", network:"tt", lat:29.70662, lng:-96.5397 },
+    { id:35,  name:"Lake Conroe RV & Camping Resort", city:"Willis", st:"TX", region:"Southeast", network:"tt", lat:30.42412, lng:-95.47966 },
+    { id:36,  name:"Lake Whitney RV Campground", city:"Whitney", st:"TX", region:"Southeast", network:"tt", lat:31.95182, lng:-97.3214 },
+    { id:37,  name:"Bay Landing RV Campground", city:"Bridgeport", st:"TX", region:"Southeast", network:"tt", lat:33.21012, lng:-97.75476 },
+    { id:38,  name:"Lake Texoma RV Campground", city:"Gordonville", st:"TX", region:"Southeast", network:"tt", lat:33.79566, lng:-96.85306 },
+    { id:39,  name:"Lake Tawakoni RV Campground", city:"Point", st:"TX", region:"Southeast", network:"tt", lat:32.93151, lng:-95.87135 },
+    { id:40,  name:"Cherokee Landing Campground", city:"Middleton", st:"TN", region:"Southeast", network:"tt", lat:35.06453, lng:-88.89089 },
+    { id:41,  name:"Natchez Trace RV Campground", city:"Hohenwald", st:"TN", region:"Southeast", network:"tt", lat:35.54785, lng:-87.55196 },
+    { id:42,  name:"Hidden Cove Resort", city:"Arley", st:"AL", region:"Southeast", network:"tt", lat:34.08004, lng:-87.21257 },
+    { id:43,  name:"Carolina Landing RV Resort", city:"Fair Play", st:"SC", region:"Southeast", network:"tt", lat:34.51121, lng:-82.98543 },
+    { id:44,  name:"The Oaks at Point South RV", city:"Yemassee", st:"SC", region:"Southeast", network:"tt", lat:32.69018, lng:-80.85066 },
+    { id:45,  name:"Green Mountain Park", city:"Lenoir", st:"NC", region:"Southeast", network:"tt", lat:35.25904, lng:-77.64849 },
+    { id:46,  name:"Forest Lake RV & Camping Resort", city:"Advance", st:"NC", region:"Southeast", network:"tt", lat:35.94129, lng:-80.40965 },
+    { id:47,  name:"Lake Gaston RV & Camping Resort", city:"Littleton", st:"NC", region:"Southeast", network:"tt", lat:36.43489, lng:-77.91196 },
+    { id:48,  name:"Lynchburg RV Resort", city:"Gladys", st:"VA", region:"Southeast", network:"tt", lat:37.1632, lng:-79.07363 },
+    { id:49,  name:"Williamsburg RV & Camping Resort", city:"Williamsburg", st:"VA", region:"Southeast", network:"tt", lat:37.27097, lng:-76.70588 },
+    { id:50,  name:"Harbor View RV & Camping Resort", city:"Colonial Beach", st:"VA", region:"Southeast", network:"tt", lat:38.25125, lng:-76.96282 },
+    { id:51,  name:"Chesapeake Bay RV Resort", city:"Gloucester", st:"VA", region:"Southeast", network:"tt", lat:37.44523, lng:-76.55945 },
+    { id:52,  name:"Virginia Landing RV Campground", city:"Quinby", st:"VA", region:"Southeast", network:"tt", lat:37.55432, lng:-75.73302 },
+    { id:53,  name:"Three Flags RV Campground", city:"Wildwood", st:"FL", region:"Southeast", network:"tt", lat:28.86529, lng:-82.03943 },
+    { id:54,  name:"Orlando RV Resort", city:"Clermont", st:"FL", region:"Southeast", network:"tt", lat:28.55519, lng:-81.76695 },
+    { id:55,  name:"Peace River RV & Camping Resort", city:"Wauchula", st:"FL", region:"Southeast", network:"tt", lat:27.54726, lng:-81.81147 },
+    { id:56,  name:"Verde Valley RV & Camping Resort", city:"Cottonwood", st:"AZ", region:"Southwest", network:"tt", lat:34.74756, lng:-112.02724 },
+    { id:57,  name:"Snowflower RV Resort", city:"Emigrant Gap", st:"CA", region:"Southwest", network:"tt", lat:39.30133, lng:-120.66035 },
+    { id:58,  name:"Lake of the Springs RV Resort", city:"Oregon House", st:"CA", region:"Southwest", network:"tt", lat:39.35628, lng:-121.27913 },
+    { id:59,  name:"Lake Minden RV Resort", city:"Nicolaus", st:"CA", region:"Southwest", network:"tt", lat:38.90176, lng:-121.57143 },
+    { id:60,  name:"Idyllwild RV Resort", city:"Idyllwild", st:"CA", region:"Southwest", network:"tt", lat:33.74028, lng:-116.71894 },
+    { id:61,  name:"Morgan Hill RV Resort", city:"Morgan Hill", st:"CA", region:"Southwest", network:"tt", lat:37.13041, lng:-121.6545 },
+    { id:62,  name:"Oakzanita Springs RV Campground", city:"Descanso", st:"CA", region:"Southwest", network:"tt", lat:32.86456, lng:-116.63012 },
+    { id:63,  name:"San Benito RV & Camping Resort", city:"Paicines", st:"CA", region:"Southwest", network:"tt", lat:36.72857, lng:-121.27854 },
+    { id:64,  name:"Russian River RV Campground", city:"Cloverdale", st:"CA", region:"Southwest", network:"tt", lat:38.80646, lng:-123.01788 },
+    { id:65,  name:"Rancho Oso RV & Camping Resort", city:"Santa Barbara", st:"CA", region:"Southwest", network:"tt", lat:34.42213, lng:-119.70267 },
+    { id:66,  name:"Ponderosa RV Resort", city:"Lotus", st:"CA", region:"Southwest", network:"tt", lat:38.80157, lng:-120.90855 },
+    { id:67,  name:"Pio Pico RV Resort & Campground", city:"Jamul", st:"CA", region:"Southwest", network:"tt", lat:32.71551, lng:-116.8668 },
+    { id:68,  name:"Palm Springs RV Resort", city:"Palm Desert", st:"CA", region:"Southwest", network:"tt", lat:33.72882, lng:-116.38257 },
+    { id:69,  name:"Yosemite Lakes RV Resort", city:"Groveland", st:"CA", region:"Southwest", network:"tt", lat:37.83758, lng:-120.24945 },
+    { id:70,  name:"Wilderness Lakes RV Resort", city:"Menifee", st:"CA", region:"Southwest", network:"tt", lat:33.6864, lng:-117.17786 },
+    { id:71,  name:"Turtle Beach RV Resort", city:"Manteca", st:"CA", region:"Southwest", network:"tt", lat:37.79862, lng:-121.21171 },
+    { id:72,  name:"Soledad Canyon RV & Camping Resort", city:"Acton", st:"CA", region:"Southwest", network:"tt", lat:34.48074, lng:-118.18684 },
+    { id:73,  name:"Blue Mesa Recreational Ranch", city:"Gunnison", st:"CO", region:"Southwest", network:"tt", lat:38.64767, lng:-107.06031 },
+    { id:74,  name:"Las Vegas RV Resort", city:"Las Vegas", st:"NV", region:"Southwest", network:"tt", lat:36.16743, lng:-115.14841 },
+    { id:75,  name:"Pine Country RV & Camping Resort", city:"Belvidere", st:"IL", region:"Midwest", network:"tt", lat:42.258, lng:-88.84173 },
+    { id:76,  name:"Indian Lakes RV Campground", city:"Batesville", st:"IN", region:"Midwest", network:"tt", lat:39.30001, lng:-85.22218 },
+    { id:77,  name:"Horseshoe Lakes RV Campground", city:"Clinton", st:"IN", region:"Midwest", network:"tt", lat:40.29928, lng:-86.46927 },
+    { id:78,  name:"Diamond Caverns RV & Golf Club", city:"Park City", st:"KY", region:"Midwest", network:"tt", lat:37.09394, lng:-86.04637 },
+    { id:79,  name:"Bear Cave RV Campground", city:"Buchanan", st:"MI", region:"Midwest", network:"tt", lat:41.82738, lng:-86.35987 },
+    { id:80,  name:"St Clair RV Resort", city:"Saint Clair", st:"MI", region:"Midwest", network:"tt", lat:42.94267, lng:-82.62836 },
+    { id:81,  name:"Wilmington RV Resort", city:"Wilmington", st:"OH", region:"Midwest", network:"tt", lat:39.44534, lng:-83.82854 },
+    { id:82,  name:"Kenisee Lake RV Campground", city:"Jefferson", st:"OH", region:"Midwest", network:"tt", lat:40.37929, lng:-80.78476 },
     { id:83,  name:"Araby Acres RV Resort", city:"", st:"AZ", region:"Trails Collection", network:"enc" },
     { id:84,  name:"Cactus Gardens RV Resort", city:"", st:"AZ", region:"Trails Collection", network:"enc" },
     { id:85,  name:"Capri RV Resort", city:"", st:"AZ", region:"Trails Collection", network:"enc" },
@@ -342,8 +342,12 @@
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
     addBooking: false,
-    bookingForm: freshBookingForm()
+    bookingForm: freshBookingForm(),
+    exploreMode: "list",
+    explorePage: 1
   };
+  var mapInstance = null;   // active Leaflet map (Explore → Map); torn down each render
+  var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
   function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
   if (!state.profile.members) state.profile.members = {};
   function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
@@ -478,47 +482,135 @@
       '</div>';
   }
 
-  function listHTML(){
+  var EXPLORE_PER_PAGE = 20;
+
+  function filteredParks(){
     var q = state.q.trim().toLowerCase();
-    var ps = PARKS.filter(function(p){
+    return PARKS.filter(function(p){
       if (state.netFilter && p.network!==state.netFilter) return false;
       if (state.freeOnly && cost(p).tier!=="included") return false;
-      if (q){ var hay=(p.name+" "+p.city+" "+p.st).toLowerCase(); if (hay.indexOf(q)===-1) return false; }
+      if (q){ if ((p.name+" "+p.city+" "+p.st).toLowerCase().indexOf(q)===-1) return false; }
       return true;
     });
-    if (!ps.length) return '<div style="padding:26px;text-align:center;color:'+C.muted+';font-size:13.5px">No parks match.</div>';
-    var rig = state.profile.rigLength;
-    return ps.map(function(p){
-      var net = NETWORKS[p.network];
-      var ci = cost(p);
-      var tags = pill(ci);
-      if (p.highUse) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 8px;border-radius:999px">Books fast</span>';
-      if (rig && p.maxRig && rig>p.maxRig) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.clay+';background:rgba(168,71,47,.12);padding:3px 8px;border-radius:999px">Rig too long</span>';
-      return '<button class="pcard tap" data-act="park" data-arg="'+p.id+'">'+
-        '<div style="flex:1">'+
-          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-            '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
-            '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
-          '</div>'+
-          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+(p.network==="tt"&&p.region?' · '+esc(p.region):'')+'</div>'+
-          '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+tags+'</div>'+
-        '</div>'+ic("chevron",18,C.muted)+'</button>';
-    }).join("");
   }
+  function hasCoord(p){ return typeof p.lat==="number" && typeof p.lng==="number"; }
+
+  function parkCardHTML(p){
+    var net = NETWORKS[p.network];
+    var rig = state.profile.rigLength;
+    var tags = pill(cost(p));
+    if (p.highUse) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 8px;border-radius:999px">Books fast</span>';
+    if (rig && p.maxRig && rig>p.maxRig) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.clay+';background:rgba(168,71,47,.12);padding:3px 8px;border-radius:999px">Rig too long</span>';
+    return '<button class="pcard tap" data-act="park" data-arg="'+p.id+'">'+
+      '<div style="flex:1">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
+          '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
+        '</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+(p.network==="tt"&&p.region?' · '+esc(p.region):'')+'</div>'+
+        '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+tags+'</div>'+
+      '</div>'+ic("chevron",18,C.muted)+'</button>';
+  }
+
+  function listHTML(){
+    var ps = filteredParks();
+    if (!ps.length) return '<div style="padding:26px;text-align:center;color:'+C.muted+';font-size:13.5px">No parks match.</div>';
+    var pages = Math.max(1, Math.ceil(ps.length/EXPLORE_PER_PAGE));
+    if (state.explorePage>pages) state.explorePage=pages;
+    if (state.explorePage<1) state.explorePage=1;
+    var start = (state.explorePage-1)*EXPLORE_PER_PAGE;
+    var pageItems = ps.slice(start, start+EXPLORE_PER_PAGE);
+    var cards = pageItems.map(parkCardHTML).join("");
+    var pager = "";
+    if (pages>1){
+      var prevDis = state.explorePage<=1, nextDis = state.explorePage>=pages;
+      function pBtn(dir,label,dis){
+        return '<button class="tap" data-act="explore-page" data-arg="'+dir+'"'+(dis?" disabled":"")+
+          ' style="padding:10px 16px;border-radius:11px;border:1px solid rgba(31,28,23,.16);background:#fff;font-weight:700;font-size:13.5px;color:'+C.pine+(dis?";opacity:.4;pointer-events:none":"")+'">'+label+'</button>';
+      }
+      pager = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px 6px">'+
+        pBtn("prev","‹ Prev",prevDis)+
+        '<span style="font-size:12.5px;font-weight:700;color:'+C.muted+'">Page '+state.explorePage+' of '+pages+'</span>'+
+        pBtn("next","Next ›",nextDis)+'</div>';
+    }
+    return cards + pager;
+  }
+
+  function modeBtn(m,label){
+    var on = state.exploreMode===m;
+    return '<button class="tap" data-act="explore-mode" data-arg="'+m+'" style="flex:1;padding:8px;border-radius:9px;border:none;font-weight:700;font-size:13px;'+(on?"background:"+C.pine+";color:#faf6ec":"background:transparent;color:#5b5446")+'">'+label+'</button>';
+  }
+  function mapNoteInner(){
+    var n = filteredParks().filter(function(p){ return !hasCoord(p); }).length;
+    return n ? '<div style="font-size:12px;color:'+C.muted+';padding:8px 16px 4px;text-align:center;line-height:1.5">'+n+' resort'+(n===1?"":"s")+' not shown — location data coming</div>' : "";
+  }
+  function mapNoteHTML(){ return '<div id="mapNote">'+mapNoteInner()+'</div>'; }
+  function updateMapNote(){ var el=document.getElementById("mapNote"); if(el) el.innerHTML=mapNoteInner(); }
 
   function exploreView(){
     var present = {}; PARKS.forEach(function(p){ present[p.network]=true; });
     var chips = '<button class="fchip tap'+(state.netFilter===""?" on":"")+'" data-act="netfilter" data-arg="">All</button>';
     Object.keys(NETWORKS).forEach(function(id){ if (present[id] && !NETWORKS[id].cardOnly) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
     var freeChip = '<button class="fchip tap'+(state.freeOnly?" on":"")+'" data-act="freeonly">$0 in my wallet</button>';
+    var toggle = '<div style="display:flex;gap:4px;margin-top:11px;background:#e6dfd0;border-radius:11px;padding:3px">'+modeBtn("list","List")+modeBtn("map","Map")+'</div>';
+    var body = state.exploreMode==="map"
+      ? mapNoteHTML()+'<div id="mapHost" style="height:60vh;margin:6px 16px 16px;border-radius:14px;overflow:hidden;border:1px solid rgba(31,28,23,.12);background:#dfe6df"></div>'
+      : '<div id="plist" style="padding:8px 16px 8px">'+listHTML()+'</div>';
     return ''+
       '<div style="padding:16px 16px 6px">'+
         '<div class="disp" style="font-size:24px;font-weight:800">Explore</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:12px">Everywhere your wallet can take you</div>'+
         '<input id="q" class="q" placeholder="Search parks or cities" value="'+esc(state.q)+'" />'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+freeChip+'</div>'+
-      '</div>'+
-      '<div id="plist" style="padding:8px 16px 8px">'+listHTML()+'</div>';
+        toggle+
+      '</div>'+ body;
+  }
+
+  /* ---- Explore map (Leaflet, lazy-loaded from CDN, online-only) ---- */
+  function ensureLeaflet(cb){
+    if (typeof L!=="undefined"){ cb(); return; }
+    if (!document.getElementById("leaflet-css")){
+      var lk=document.createElement("link"); lk.id="leaflet-css"; lk.rel="stylesheet";
+      lk.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(lk);
+    }
+    var sc=document.getElementById("leaflet-js");
+    if (!sc){
+      sc=document.createElement("script"); sc.id="leaflet-js"; sc.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      sc.onload=function(){ cb(); };
+      sc.onerror=function(){ var h=document.getElementById("mapHost"); if(h) h.innerHTML='<div style="padding:30px 20px;text-align:center;color:'+C.muted+';font-size:13.5px">Map needs a connection. Switch to List to browse offline.</div>'; };
+      document.head.appendChild(sc);
+    } else {
+      var iv=setInterval(function(){ if(typeof L!=="undefined"){ clearInterval(iv); cb(); } }, 60);
+    }
+  }
+  function teardownMap(){ if (mapInstance){ try{ mapInstance.remove(); }catch(e){} mapInstance=null; } }
+  function initExploreMap(){
+    ensureLeaflet(function(){
+      var host=document.getElementById("mapHost"); if(!host || typeof L==="undefined") return;
+      teardownMap();
+      mapInstance=L.map(host,{ zoomControl:true, attributionControl:true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ maxZoom:18, attribution:"© OpenStreetMap" }).addTo(mapInstance);
+      var pts=filteredParks().filter(hasCoord);
+      if (pts.length){
+        var bounds=[];
+        pts.forEach(function(p){
+          var m=L.marker([p.lat,p.lng]).addTo(mapInstance);
+          m.bindPopup('<div style="min-width:150px"><div class="disp" style="font-weight:800;font-size:14px">'+esc(p.name)+'</div>'+
+            '<div style="font-size:12px;color:#867d6c;margin:2px 0 8px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(NETWORKS[p.network].short)+'</div>'+
+            '<button type="button" data-mappark="'+p.id+'" style="background:'+C.ember+';color:#fff;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer">Open details ›</button></div>');
+          bounds.push([p.lat,p.lng]);
+        });
+        mapInstance.fitBounds(bounds,{ padding:[28,28], maxZoom:9 });
+      } else {
+        mapInstance.setView([39.5,-98.35], 3);   // continental US, no pins in this filter
+      }
+      mapInstance.on("popupopen", function(e){
+        var node=e.popup.getElement(); if(!node) return;
+        var btn=node.querySelector("[data-mappark]"); if(!btn) return;
+        btn.onclick=function(){ state.selected=parseInt(btn.getAttribute("data-mappark"),10); state.dates={in:"",out:""}; render(); };
+      });
+      setTimeout(function(){ if(mapInstance) mapInstance.invalidateSize(); }, 0);
+    });
   }
 
   function detailView(){
@@ -981,6 +1073,7 @@
 
   function render(){
     var app = document.getElementById("app");
+    teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
     if (!state.unlocked){ app.innerHTML = gateView(); var pc=document.getElementById("pc"); if(pc) pc.focus(); return; }
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
@@ -997,6 +1090,7 @@
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
     '</div>';
+    if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
   function tryUnlock(){
@@ -1022,8 +1116,14 @@
     else if (act==="unlock"){ tryUnlock(); }
     else if (act==="park"){ state.selected=parseInt(arg,10); state.dates={in:"",out:""}; render(); }
     else if (act==="back"){ state.selected=null; render(); }
-    else if (act==="netfilter"){ state.netFilter=arg; render(); }
-    else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; render(); }
+    else if (act==="netfilter"){ state.netFilter=arg; state.explorePage=1; render(); }
+    else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; state.explorePage=1; render(); }
+    else if (act==="explore-mode"){ if (state.exploreMode!==arg){ state.exploreMode=arg; render(); } }
+    else if (act==="explore-page"){
+      state.explorePage += (arg==="next"?1:-1);
+      if (state.explorePage<1) state.explorePage=1;
+      var pl=document.getElementById("plist"); if(pl){ pl.innerHTML=listHTML(); pl.scrollIntoView({block:"start"}); } else render();
+    }
     else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
     else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ window.open(NETWORKS[pp.network].url,"_blank"); } }
     else if (act==="copynum"){ var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
@@ -1059,7 +1159,17 @@
   });
   document.addEventListener("input", function(e){
     var t = e.target; if (!t || !t.getAttribute) return;
-    if (t.id==="q"){ state.q=t.value; var l=document.getElementById("plist"); if(l) l.innerHTML=listHTML(); return; }
+    if (t.id==="q"){
+      state.q=t.value; state.explorePage=1;
+      if (state.exploreMode==="map"){
+        updateMapNote();
+        clearTimeout(mapSearchTimer);
+        mapSearchTimer=setTimeout(function(){ if(state.tab==="explore" && state.exploreMode==="map" && document.getElementById("mapHost")) initExploreMap(); }, 400);
+      } else {
+        var l=document.getElementById("plist"); if(l) l.innerHTML=listHTML();
+      }
+      return;
+    }
     var rk = t.getAttribute("data-refer");
     if (rk){ state.refer[rk]=t.value; updateReferBtn(); return; }
     var pk = t.getAttribute("data-profile");

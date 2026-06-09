@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v1";
+var CACHE = "hitchpass-v2";
 
 /* Same-origin shell — must all cache or install fails (these always exist). */
 var LOCAL = [
@@ -38,21 +38,32 @@ self.addEventListener("activate", function(e){
 self.addEventListener("fetch", function(e){
   var req = e.request;
   if (req.method !== "GET") return;
+
+  /* Navigations: network-first so shell updates ship immediately; cache offline. */
+  if (req.mode === "navigate"){
+    e.respondWith(
+      fetch(req).then(function(res){
+        var copy = res.clone();
+        caches.open(CACHE).then(function(c){ c.put("./index.html", copy); }).catch(function(){});
+        return res;
+      }).catch(function(){
+        return caches.match("./index.html").then(function(r){ return r || caches.match("./"); });
+      })
+    );
+    return;
+  }
+
+  /* Everything else (icons, fonts, Leaflet JS/CSS, tiles): cache-first, runtime-cache. */
   e.respondWith(
     caches.match(req).then(function(cached){
       if (cached) return cached;
       return fetch(req).then(function(res){
-        /* runtime-cache successful or opaque responses (e.g. font woff2) */
         if (res && (res.ok || res.type === "opaque")){
           var copy = res.clone();
           caches.open(CACHE).then(function(c){ c.put(req, copy); }).catch(function(){});
         }
         return res;
-      }).catch(function(){
-        /* offline + uncached: fall back to the app shell for navigations */
-        if (req.mode === "navigate") return caches.match("./index.html");
-        return Response.error();
-      });
+      }).catch(function(){ return Response.error(); });
     })
   );
 });

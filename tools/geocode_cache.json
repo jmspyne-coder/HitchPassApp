@@ -1,0 +1,325 @@
+{
+  "bend|or": {
+    "lat": 44.05817,
+    "lng": -121.31531
+  },
+  "cloverdale|or": {
+    "lat": 45.2016,
+    "lng": -123.88509
+  },
+  "seaside|or": {
+    "lat": 45.99325,
+    "lng": -123.92021
+  },
+  "south beach|or": {
+    "lat": 44.61233,
+    "lng": -124.04874
+  },
+  "florence|or": {
+    "lat": 43.98001,
+    "lng": -124.10131
+  },
+  "la conner|wa": {
+    "lat": 48.39189,
+    "lng": -122.49425
+  },
+  "concrete|wa": {
+    "lat": 48.53893,
+    "lng": -121.74693
+  },
+  "quincy|wa": {
+    "lat": 47.23437,
+    "lng": -119.85351
+  },
+  "chehalis|wa": {
+    "lat": 46.65997,
+    "lng": -122.96343
+  },
+  "blaine|wa": {
+    "lat": 48.98811,
+    "lng": -122.74358
+  },
+  "leavenworth|wa": {
+    "lat": 47.59691,
+    "lng": -120.66108
+  },
+  "newport|wa": {
+    "lat": 48.17963,
+    "lng": -117.04326
+  },
+  "seaview|wa": {
+    "lat": 46.33454,
+    "lng": -124.0546
+  },
+  "monroe|wa": {
+    "lat": 47.85523,
+    "lng": -121.97133
+  },
+  "silver creek|wa": {
+    "lat": 46.52539,
+    "lng": -122.59048
+  },
+  "ocean city|wa": {
+    "lat": 47.07098,
+    "lng": -124.16271
+  },
+  "bow|wa": {
+    "lat": 48.56113,
+    "lng": -122.40806
+  },
+  "lindell beach|bc": {
+    "fail": true
+  },
+  "wells|me": {
+    "lat": 43.32205,
+    "lng": -70.58074
+  },
+  "sturbridge|ma": {
+    "lat": 42.10844,
+    "lng": -72.08078
+  },
+  "rochester|ma": {
+    "lat": 41.73172,
+    "lng": -70.8203
+  },
+  "swainton|nj": {
+    "lat": 39.1315,
+    "lng": -74.77739
+  },
+  "ocean view|nj": {
+    "lat": 39.19147,
+    "lng": -74.73203
+  },
+  "port republic|nj": {
+    "lat": 39.52067,
+    "lng": -74.48571
+  },
+  "accord|ny": {
+    "lat": 41.79812,
+    "lng": -74.2293
+  },
+  "scotrun|pa": {
+    "lat": 41.06592,
+    "lng": -75.31991
+  },
+  "manheim|pa": {
+    "lat": 40.16374,
+    "lng": -76.39524
+  },
+  "lebanon|pa": {
+    "lat": 40.37571,
+    "lng": -76.46261
+  },
+  "dover|pa": {
+    "lat": 40.00145,
+    "lng": -76.84733
+  },
+  "lancaster|pa": {
+    "lat": 40.038,
+    "lng": -76.30567
+  },
+  "east stroudsburg|pa": {
+    "lat": 40.99954,
+    "lng": -75.18129
+  },
+  "lakehills|tx": {
+    "lat": 29.5844,
+    "lng": -98.94892
+  },
+  "columbus|tx": {
+    "lat": 29.70662,
+    "lng": -96.5397
+  },
+  "willis|tx": {
+    "lat": 30.42412,
+    "lng": -95.47966
+  },
+  "whitney|tx": {
+    "lat": 31.95182,
+    "lng": -97.3214
+  },
+  "bridgeport|tx": {
+    "lat": 33.21012,
+    "lng": -97.75476
+  },
+  "gordonville|tx": {
+    "lat": 33.79566,
+    "lng": -96.85306
+  },
+  "point|tx": {
+    "lat": 32.93151,
+    "lng": -95.87135
+  },
+  "middleton|tn": {
+    "lat": 35.06453,
+    "lng": -88.89089
+  },
+  "hohenwald|tn": {
+    "lat": 35.54785,
+    "lng": -87.55196
+  },
+  "arley|al": {
+    "lat": 34.08004,
+    "lng": -87.21257
+  },
+  "fair play|sc": {
+    "lat": 34.51121,
+    "lng": -82.98543
+  },
+  "yemassee|sc": {
+    "lat": 32.69018,
+    "lng": -80.85066
+  },
+  "lenoir|nc": {
+    "lat": 35.25904,
+    "lng": -77.64849
+  },
+  "advance|nc": {
+    "lat": 35.94129,
+    "lng": -80.40965
+  },
+  "littleton|nc": {
+    "lat": 36.43489,
+    "lng": -77.91196
+  },
+  "gladys|va": {
+    "lat": 37.1632,
+    "lng": -79.07363
+  },
+  "williamsburg|va": {
+    "lat": 37.27097,
+    "lng": -76.70588
+  },
+  "colonial beach|va": {
+    "lat": 38.25125,
+    "lng": -76.96282
+  },
+  "gloucester|va": {
+    "lat": 37.44523,
+    "lng": -76.55945
+  },
+  "quinby|va": {
+    "lat": 37.55432,
+    "lng": -75.73302
+  },
+  "wildwood|fl": {
+    "lat": 28.86529,
+    "lng": -82.03943
+  },
+  "clermont|fl": {
+    "lat": 28.55519,
+    "lng": -81.76695
+  },
+  "wauchula|fl": {
+    "lat": 27.54726,
+    "lng": -81.81147
+  },
+  "cottonwood|az": {
+    "lat": 34.74756,
+    "lng": -112.02724
+  },
+  "emigrant gap|ca": {
+    "lat": 39.30133,
+    "lng": -120.66035
+  },
+  "oregon house|ca": {
+    "lat": 39.35628,
+    "lng": -121.27913
+  },
+  "nicolaus|ca": {
+    "lat": 38.90176,
+    "lng": -121.57143
+  },
+  "idyllwild|ca": {
+    "lat": 33.74028,
+    "lng": -116.71894
+  },
+  "morgan hill|ca": {
+    "lat": 37.13041,
+    "lng": -121.6545
+  },
+  "descanso|ca": {
+    "lat": 32.86456,
+    "lng": -116.63012
+  },
+  "paicines|ca": {
+    "lat": 36.72857,
+    "lng": -121.27854
+  },
+  "cloverdale|ca": {
+    "lat": 38.80646,
+    "lng": -123.01788
+  },
+  "santa barbara|ca": {
+    "lat": 34.42213,
+    "lng": -119.70267
+  },
+  "lotus|ca": {
+    "lat": 38.80157,
+    "lng": -120.90855
+  },
+  "jamul|ca": {
+    "lat": 32.71551,
+    "lng": -116.8668
+  },
+  "palm desert|ca": {
+    "lat": 33.72882,
+    "lng": -116.38257
+  },
+  "groveland|ca": {
+    "lat": 37.83758,
+    "lng": -120.24945
+  },
+  "menifee|ca": {
+    "lat": 33.6864,
+    "lng": -117.17786
+  },
+  "manteca|ca": {
+    "lat": 37.79862,
+    "lng": -121.21171
+  },
+  "acton|ca": {
+    "lat": 34.48074,
+    "lng": -118.18684
+  },
+  "gunnison|co": {
+    "lat": 38.64767,
+    "lng": -107.06031
+  },
+  "las vegas|nv": {
+    "lat": 36.16743,
+    "lng": -115.14841
+  },
+  "belvidere|il": {
+    "lat": 42.258,
+    "lng": -88.84173
+  },
+  "batesville|in": {
+    "lat": 39.30001,
+    "lng": -85.22218
+  },
+  "clinton|in": {
+    "lat": 40.29928,
+    "lng": -86.46927
+  },
+  "park city|ky": {
+    "lat": 37.09394,
+    "lng": -86.04637
+  },
+  "buchanan|mi": {
+    "lat": 41.82738,
+    "lng": -86.35987
+  },
+  "saint clair|mi": {
+    "lat": 42.94267,
+    "lng": -82.62836
+  },
+  "wilmington|oh": {
+    "lat": 39.44534,
+    "lng": -83.82854
+  },
+  "jefferson|oh": {
+    "lat": 40.37929,
+    "lng": -80.78476
+  }
+}
