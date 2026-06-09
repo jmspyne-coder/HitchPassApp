@@ -90,33 +90,84 @@
     locked:     { bg:"rgba(134,125,108,.12)",fg:"#867d6c", label:"+"  }
   };
 
-  /* Membership tiers — "what I get" benefit sets, from verified membership
-     literature. Journey booking windows are NOT in the source → flagged. */
-  var TIERS = {
-    camping: { name:"Camping Pass", sub:"Regional membership", benefits:[
-      { label:"Nationwide camping", value:"Regional · 1 included region" },
-      { label:"Stays & booking",    value:"14 nights · 60-day window" },
-      { label:"Day-use privileges", value:"Included" },
-      { label:"Add more regions",   value:"$140 / yr each" }
-    ]},
-    adventure: { name:"Adventure", sub:"Full Thousand Trails access", benefits:[
-      { label:"Nationwide camping",        value:"All 82 Thousand Trails parks" },
-      { label:"Stays & booking",           value:"21 nights · 180-day window" },
-      { label:"RV site discounts",         value:"20% off daily rates" },
-      { label:"Cabins & getaways",         value:"Up to 50% off · $60 getaway cabins" },
-      { label:"Trails Collection+ (Encore)", value:"122 Encore resorts included" },
-      { label:"RPI condos",                value:"Trade a week for a condo worldwide" },
-      { label:"Family benefits",           value:"8 courtesy cards · 4 passes" },
-      { label:"Extension weeks",           value:"4 @ $29 + 2 @ $99 / yr" }
-    ]},
-    journey: { name:"Journey / Explore", sub:"Camping Pass + getaways", benefits:[
-      { label:"Nationwide camping", value:"Regional · 1 included region" },
-      { label:"Stays & booking",    value:"Confirm against your sheet", flag:true },
-      { label:"Day-use privileges", value:"Included" },
-      { label:"Cabins & getaways",  value:"Up to 50% off · $60 getaway cabins" },
-      { label:"Add more regions",   value:"$140 / yr each" }
-    ]}
+  /* Membership matrix — verbatim from thousandtrails.com/memberships (scraped
+     2026-06-09, 13/13 asserts pass). Drives the Profile tier selector + Perks.
+     Everything confirmed EXCEPT bundled.c2c and the "**" footnote → those keep
+     an "Unverified — confirm" badge. Never fabricate. */
+  var PERKS = {
+    tiers: [
+      { key:"camping",   label:"Annual Camping Pass", monthly:"$65",  down:"None", enhanced:false },
+      { key:"journey",   label:"Journey",             monthly:"$163", down:"$500", enhanced:true },
+      { key:"explore",   label:"Explore",             monthly:"$221", down:"$700", enhanced:true },
+      { key:"adventure", label:"Adventure",           monthly:"$313", down:"$900", enhanced:true }
+    ],
+    campingRegions: { Northwest:18, Midwest:8, Northeast:14, Southwest:19, Southeast:23 }, // 82
+    features: [
+      { label:"Enhanced Membership", camping:"No", journey:"Yes", explore:"Yes", adventure:"Yes" },
+      { label:"Number of Included Campgrounds", camping:"Choose Region(s)", journey:"All Thousand Trails Campgrounds", explore:"All Thousand Trails Campgrounds", adventure:"All Thousand Trails Campgrounds" },
+      { label:"Advance Reservations", camping:"60 Days", journey:"120 Days", explore:"150 Days", adventure:"180 Days" },
+      { label:"Days In / Days Out", camping:"14 Days In / 7 Days Out", journey:"21 Days In / Park-to-Park", explore:"21 Days In / Park-to-Park", adventure:"21 Days In / Park-to-Park" },
+      { label:"Extension Weeks", camping:"No", journey:"2", explore:"2", adventure:"6", detailByTier:{ adventure:"4 Non-High Use Weeks/Year at $29/Week + 2 High Use Weeks/Year at $99/Week." } },
+      { label:"Holiday Reservations on File", camping:"1", journey:"1", explore:"1", adventure:"2" },
+      { label:"Up to 50% Off Cabin Rentals", camping:"No", journey:"Yes", explore:"Yes", adventure:"Yes", detailByTier:{ adventure:"25 to 50% based on number of nights." } },
+      { label:"Cabin Week Rebates", camping:"No", journey:"Yes", explore:"Yes", adventure:"Yes", detailByTier:{ adventure:"One Week Complimentary Standard Cabin Rental Rebate Per Year." } },
+      { label:"Getaway Cabin Weeks", camping:"No", journey:"No", explore:"Yes", adventure:"Yes", detailByTier:{ adventure:"Rent Getaway Cabins for $60/Night; One Complimentary Week In A Getaway Cabin Per Year." } },
+      { label:"Family Benefits", camping:"No", journey:"Yes", explore:"Yes", adventure:"Yes", detailByTier:{ adventure:"Offer 8 Family Courtesy Cards; Issue 4 Nationwide Camping Passes." } },
+      { label:"Resort Parks International (RPI) Reciprocal", camping:"No", journey:"Yes", explore:"Yes", adventure:"Yes", program:"rpi" },
+      { label:"The Trails Collection Reciprocal", camping:"Option to Join", journey:"Yes", explore:"Yes", adventure:"No", program:"trailsCollection", footnote:"*" },
+      { label:"The Trails Collection Plus Reciprocal", camping:"No", journey:"No", explore:"No", adventure:"Yes", program:"trailsCollectionPlus", footnote:"**" },
+      { label:"Two and Four Year Terms Available", camping:"1, 2, or 4 year(s)", journey:"2 or 4 years", explore:"2 or 4 years", adventure:"2 or 4 years" }
+    ],
+    programs: {
+      rpi: {
+        net:"rpi", title:"Resort Parks International (RPI)",
+        detail:"Travel & camping reciprocal. Trade Getaway Weeks for condo stays and cruises.",
+        link:"https://ResortParks.com", phone:"(800) 281-4977",
+        condos:["Fiji","Ireland","Philipsburg St. Maarten","Las Vegas","Hawaii"],
+        condoNote:"Search ResortParks.com under 'Non-RV Travel'.",
+        cruiseLines:["Royal Caribbean","Carnival","Norwegian"],
+        cruiseRules:{
+          title:"Cruise trade — how it works",
+          steps:[
+            "Step 1 — Reserve a peak-season week at your home resort and tell them you'll deposit it with RPI. Its check-in date must be at least 91 days from date of deposit.",
+            "Step 2 — Deposit the week on the Deposit My Week page. Pay any cleaning fee (set by your home resort). Pay the $199 trade fee — refundable if you don't book a cruise.",
+            "Step 3 — Select a cruise on trade with a cruise specialist. Pay all port fees and taxes, plus any upgrade fees. All fees due at booking and non-refundable. Travel insurance available and recommended."
+          ],
+          keyPoints:[
+            "Cannot be combined with any other discount; applied to regular cruise fare, not promotional fares.",
+            "May be booked up to one year in advance.",
+            "Select 3 or 4 night cruises, or select 5+ night cruises on a 2-for-1 trade. The 2-for-1 requires port fees and taxes for one traveler plus regular fare and port fees/taxes for the second.",
+            "Available cruises typically sail out of Miami; other ports vary by time of year. Holidays and peak seasons excluded.",
+            "Interior cabins — typically entry level (1A) or inside guarantee (cruise line selects room). Upgrades may be available for a fee.",
+            "May be taken only once every other year.",
+            "Trades and Vacation Credits may NOT be combined on the same cruise; you may book two cruises in one year using a trade for one and a Vacation Credit for another.",
+            "Gratuities not included.",
+            "Transportation to/from port not included; posted on RPI's website.",
+            "Rules subject to change without notice; posted on RPI's website.",
+            "Cruises include meals, entertainment, lodging. Some specialty dining/entertainment/activities cost extra."
+          ]
+        }
+      },
+      trailsCollection: {
+        net:"enc", title:"The Trails Collection",
+        detail:"100+ additional locations incl. select Encore RV Resorts in sunbelt destinations. Age Qualified. Requires $20 per night.",
+        link:"https://TrailsCollection.com", phone:"(888) 579-7599"
+      },
+      trailsCollectionPlus: {
+        net:"enc", title:"The Trails Collection Plus",
+        detail:"21 Days In, Park-to-Park, 90-Day Booking."
+      }
+    },
+    bundled: {
+      c2c: { net:"c2c", title:"Coast to Coast", detail:"Bundled with membership. Benefit detail not yet sourced.", confirmed:false }
+    },
+    footnotes: {
+      "*": "Requires 2-year minimum agreement. The Annual Camping Pass requires 2-year minimum agreement if choosing monthly payment. State and local taxes may apply.",
+      "**": "Footnote text not captured — confirm."
+    }
   };
+  function perksTierDef(key){ for (var i=0;i<PERKS.tiers.length;i++){ if (PERKS.tiers[i].key===key) return PERKS.tiers[i]; } return null; }
+  function perksTierLabel(key){ var d=perksTierDef(key); return d?d.label:key; }
 
   /* illustrative sample across networks/regions; swap for real export */
   var PARKS = [
@@ -344,7 +395,9 @@
     addBooking: false,
     bookingForm: freshBookingForm(),
     exploreMode: "list",
-    explorePage: 1
+    explorePage: 1,
+    perksExpanded: {},   // Perks Section A: which feature rows are expanded (by index)
+    perksCompare: false  // Perks Section C: full 4-tier matrix open/closed
   };
   var mapInstance = null;   // active Leaflet map (Explore → Map); torn down each render
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
@@ -887,8 +940,8 @@
 
   function tierCard(){
     var cur = state.tier || "adventure";
-    var chips = Object.keys(TIERS).map(function(k){
-      return '<button class="fchip tap'+(cur===k?" on":"")+'" data-act="set-tier" data-arg="'+k+'">'+esc(TIERS[k].name)+'</button>';
+    var chips = PERKS.tiers.map(function(t){
+      return '<button class="fchip tap'+(cur===t.key?" on":"")+'" data-act="set-tier" data-arg="'+t.key+'">'+esc(t.label)+'</button>';
     }).join("");
     return '<div class="det">'+
       '<div class="dlabel" style="font-size:12px">Membership tier</div>'+
@@ -914,27 +967,182 @@
       '</div>';
   }
 
-  function perksView(){
-    var tkey = state.tier || "adventure";
-    var t = TIERS[tkey] || TIERS.adventure;
-    var rows = t.benefits.map(function(b){
-      var val = b.flag
-        ? '<span style="font-size:11.5px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 9px;border-radius:999px">'+esc(b.value)+'</span>'
-        : '<span style="font-size:12.5px;color:'+C.muted+';font-weight:600;text-align:right">'+esc(b.value)+'</span>';
-      return '<button class="tap" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 0;border-top:1px solid rgba(31,28,23,.07)">'+
-        '<span style="flex:1;font-size:14px;font-weight:700;min-width:38%">'+esc(b.label)+'</span>'+
-        val+ic("chevron",16,C.muted)+'</button>';
+  function perksBadgeUnverified(){
+    return '<span style="font-size:10px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.12);padding:2px 7px;border-radius:999px;display:inline-flex;align-items:center;gap:3px;vertical-align:middle">'+ic("alert",10,C.ember)+'Unverified — confirm</span>';
+  }
+  /* numeric rank only for genuine counts ("2","6") and day-windows ("60 Days") —
+     deliberately returns null for term strings like "2 or 4 years". */
+  function perksNum(v){
+    v = String(v).trim();
+    if (/^\d+$/.test(v)) return parseInt(v,10);
+    var m = v.match(/^(\d+)\s*Days?\b/i); return m ? parseInt(m[1],10) : null;
+  }
+  function perksImproves(cur, next){
+    if (next==="No") return false;
+    if (cur==="No") return true;                                   // newly included
+    if (cur==="Option to Join" && next==="Yes") return true;       // now bundled in
+    var cn=perksNum(cur), nn=perksNum(next);
+    if (cn!=null && nn!=null && nn>cn) return true;                // bigger count / wider window
+    if (cur==="Choose Region(s)" && /^All/.test(next)) return true; // regional → national
+    return false;
+  }
+  function perksProgramDetailHTML(progKey){
+    var pr = PERKS.programs[progKey]; if (!pr) return "";
+    var h = '<div style="font-size:12.5px;color:'+C.muted+';line-height:1.5">'+esc(pr.detail)+'</div>';
+    if (pr.condos && pr.condos.length){
+      h += '<div style="margin-top:8px;font-size:12.5px"><b>Condos:</b> '+esc(pr.condos.join(", "))+'.'+
+        (pr.condoNote ? ' <span style="color:'+C.muted+'">'+esc(pr.condoNote)+'</span>' : '')+'</div>';
+    }
+    if (pr.cruiseLines && pr.cruiseLines.length){
+      h += '<div style="margin-top:6px;font-size:12.5px"><b>Cruise lines:</b> '+esc(pr.cruiseLines.join(", "))+'.</div>';
+    }
+    if (pr.cruiseRules){
+      var cr = pr.cruiseRules;
+      h += '<div style="margin-top:10px;font-size:12.5px;font-weight:700">'+esc(cr.title)+'</div>'+
+        '<ol style="margin:6px 0 0;padding-left:18px;font-size:12.5px;color:'+C.muted+';line-height:1.5">'+
+          cr.steps.map(function(s){ return '<li style="margin-bottom:5px">'+esc(s)+'</li>'; }).join("")+'</ol>'+
+        '<ul style="margin:8px 0 0;padding-left:18px;font-size:12px;color:'+C.muted+';line-height:1.5">'+
+          cr.keyPoints.map(function(s){ return '<li style="margin-bottom:4px">'+esc(s)+'</li>'; }).join("")+'</ul>';
+    }
+    if (pr.link || pr.phone){
+      h += '<div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">';
+      if (pr.link) h += '<a class="tap" href="'+esc(pr.link)+'" target="_blank" rel="noopener" style="font-size:12.5px;font-weight:700;color:'+C.green+';display:inline-flex;align-items:center;gap:4px">'+ic("ext",13,C.green)+esc(pr.link.replace(/^https?:\/\//,""))+'</a>';
+      if (pr.phone) h += '<a class="tap" href="tel:'+esc(pr.phone.replace(/[^\d+]/g,""))+'" style="font-size:12.5px;font-weight:700;color:'+C.green+'">'+esc(pr.phone)+'</a>';
+      h += '</div>';
+    }
+    return h;
+  }
+  function perksIsCampgrounds(f){ return f.label.indexOf("Number of Included Campgrounds")===0; }
+  function perksHasDetail(f, tierKey){
+    return (perksIsCampgrounds(f) && tierKey==="camping")
+      || !!(f.detailByTier && f.detailByTier[tierKey]) || !!f.program || !!f.footnote;
+  }
+  function perksFeatureDetailHTML(f, tierKey){
+    var parts = [];
+    if (perksIsCampgrounds(f) && tierKey==="camping"){
+      var reg = PERKS.campingRegions, total=0;
+      var rows = Object.keys(reg).map(function(k){ total+=reg[k];
+        return '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0"><span>'+esc(k)+'</span><b>'+reg[k]+'</b></div>'; }).join("");
+      parts.push('<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:4px">Choose 1 included region; add more for $140/yr each.</div>'+rows+
+        '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0 0;border-top:1px solid rgba(31,28,23,.08);margin-top:4px"><b>Total</b><b>'+total+' campgrounds</b></div>');
+    }
+    if (f.detailByTier && f.detailByTier[tierKey])
+      parts.push('<div style="font-size:12.5px;color:'+C.muted+';line-height:1.5">'+esc(f.detailByTier[tierKey])+'</div>');
+    if (f.program) parts.push(perksProgramDetailHTML(f.program));
+    if (f.footnote){
+      var ft = PERKS.footnotes[f.footnote], unv = (f.footnote==="**");
+      parts.push('<div style="font-size:11.5px;color:'+C.muted+';line-height:1.5">'+esc(f.footnote)+' '+esc(ft||"")+(unv?' '+perksBadgeUnverified():'')+'</div>');
+    }
+    return parts.join('<div style="height:8px"></div>');
+  }
+  function perksSectionA(tierKey){
+    var html = "";
+    PERKS.features.forEach(function(f, idx){
+      var val = f[tierKey];
+      if (val==="No") return;                                       // not included at this tier → omit
+      var disp = (val==="Yes") ? esc(f.label)
+        : esc(f.label)+': <span style="color:'+C.muted+'">'+esc(val)+'</span>';
+      var foot = f.footnote ? '<sup style="color:'+C.muted+'">'+esc(f.footnote)+'</sup>' : "";
+      var hasD = perksHasDetail(f, tierKey), open = !!state.perksExpanded[idx];
+      var head = '<button class="tap" '+(hasD?'data-act="perks-toggle" data-arg="'+idx+'"':'disabled style="cursor:default"')+
+        ' style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 0;border-top:1px solid rgba(31,28,23,.07);background:none">'+
+        '<span style="flex:1;font-size:14px;font-weight:700">'+disp+foot+'</span>'+
+        (hasD ? '<span style="display:inline-flex;transform:rotate('+(open?'90':'0')+'deg);transition:transform .15s">'+ic("chevron",16,C.muted)+'</span>' : '')+
+        '</button>';
+      var body = (hasD && open)
+        ? '<div style="padding:10px 0 12px"><div style="border-top:1px dashed rgba(31,28,23,.12);padding-top:10px">'+perksFeatureDetailHTML(f, tierKey)+'</div></div>'
+        : "";
+      html += head + body;
+    });
+    return html;
+  }
+  function perksSectionB(tierKey){
+    var i=-1; for (var k=0;k<PERKS.tiers.length;k++){ if (PERKS.tiers[k].key===tierKey) i=k; }
+    var next = (i>=0 && i<PERKS.tiers.length-1) ? PERKS.tiers[i+1] : null;
+    if (!next){
+      var plus = PERKS.programs.trailsCollectionPlus;
+      return '<div class="dlabel" style="font-size:12px">Unlock by upgrading</div>'+
+        '<div style="margin-top:8px;font-size:15px;font-weight:800;color:'+C.green+'">You’re at the top tier</div>'+
+        '<div style="margin-top:6px;font-size:12.5px;color:'+C.muted+';line-height:1.5">Adventure includes the exclusive <b style="color:'+C.ink+'">'+esc(plus.title)+'</b> reciprocal — '+esc(plus.detail)+'</div>';
+    }
+    var gains = [];
+    PERKS.features.forEach(function(f){
+      if (perksImproves(f[tierKey], f[next.key])){
+        var from = (f[tierKey]==="No") ? "—" : f[tierKey];
+        gains.push('<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-top:1px solid rgba(31,28,23,.07)">'+
+          '<span style="color:'+C.green+';flex-shrink:0;margin-top:1px">'+ic("sparkles",15,C.green)+'</span>'+
+          '<div style="flex:1"><div style="font-size:13.5px;font-weight:700">'+esc(f.label)+'</div>'+
+          '<div style="font-size:12px;color:'+C.muted+';margin-top:1px">'+esc(from)+' → <b style="color:'+C.ink+'">'+esc(f[next.key])+'</b></div></div></div>');
+      }
+    });
+    return '<div class="dlabel" style="font-size:12px">Unlock by upgrading to '+esc(next.label)+'</div>'+
+      '<div style="font-size:12px;color:'+C.muted+';margin-top:3px">'+esc(next.monthly)+'/mo · '+esc(next.down)+' down</div>'+
+      (gains.length ? gains.join("") : '<div style="font-size:12.5px;color:'+C.muted+';margin-top:8px">No tracked feature changes at the next tier.</div>');
+  }
+  function perksMatrixCell(v){
+    if (v==="Yes") return '<span style="color:'+C.green+';font-weight:800">✓</span>';
+    if (v==="No")  return '<span style="color:#c7bfae">—</span>';
+    return '<span style="font-size:10.5px;color:'+C.ink+';line-height:1.3">'+esc(v)+'</span>';
+  }
+  function perksMatrixHTML(){
+    var tiers = PERKS.tiers;
+    function hl(key){ return key===state.tier ? ';background:rgba(47,107,70,.08)' : ''; }
+    var head = '<tr><th style="text-align:left;font-size:11px;color:'+C.muted+';padding:6px 4px;font-weight:700">Feature</th>'+
+      tiers.map(function(t){ return '<th style="font-size:11px;color:'+C.muted+';padding:6px 3px;font-weight:700;text-align:center'+hl(t.key)+'">'+esc(t.label.replace("Annual ",""))+'</th>'; }).join("")+'</tr>';
+    var price = '<tr><td style="font-size:11.5px;font-weight:700;padding:7px 4px">Price</td>'+
+      tiers.map(function(t){ return '<td style="text-align:center;padding:7px 3px;font-size:10.5px'+hl(t.key)+'"><b>'+esc(t.monthly)+'</b><br><span style="color:'+C.muted+'">'+esc(t.down)+'</span></td>'; }).join("")+'</tr>';
+    var rows = PERKS.features.map(function(f){
+      return '<tr><td style="font-size:11.5px;padding:7px 4px;border-top:1px solid rgba(31,28,23,.06)">'+esc(f.label)+(f.footnote?'<sup>'+esc(f.footnote)+'</sup>':'')+'</td>'+
+        tiers.map(function(t){ return '<td style="text-align:center;padding:7px 3px;border-top:1px solid rgba(31,28,23,.06)'+hl(t.key)+'">'+perksMatrixCell(f[t.key])+'</td>'; }).join("")+'</tr>';
     }).join("");
-    return ''+
-      '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Perks</div>'+
-        '<div style="font-size:12.5px;color:'+C.muted+'">What your '+esc(t.name)+' membership includes</div></div>'+
-      '<div class="det">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
-          '<div class="dlabel" style="font-size:12px">'+esc(t.name)+' · '+esc(t.sub)+'</div>'+
-          '<button class="tap" data-act="nav" data-arg="profile" style="font-size:12px;font-weight:700;color:'+C.green+'">Change tier</button>'+
-        '</div>'+ rows +
-      '</div>'+
-      '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;padding:0 24px 16px;line-height:1.5">Benefits reflect published membership literature — confirm specifics on your agreement before quoting a prospect.</div>';
+    var foots = Object.keys(PERKS.footnotes).map(function(key){
+      var unv = (key==="**");
+      return '<div style="font-size:11px;color:'+C.muted+';margin-top:6px;line-height:1.5">'+esc(key)+' '+esc(PERKS.footnotes[key])+(unv?' '+perksBadgeUnverified():'')+'</div>';
+    }).join("");
+    return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+head+price+rows+'</table></div>'+foots;
+  }
+
+  function perksView(){
+    var tierKey = state.tier;
+    var def = perksTierDef(tierKey);
+    var header = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">What I get</div>';
+
+    if (!def){   // tier unset / unknown → show all four tiers + prompt
+      var cards = PERKS.tiers.map(function(t){
+        return '<button class="tap" data-act="nav" data-arg="profile" style="text-align:left;width:100%;background:#fff;border:1px solid rgba(31,28,23,.10);border-radius:14px;padding:14px;margin-bottom:10px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><span class="disp" style="font-size:17px;font-weight:800">'+esc(t.label)+'</span>'+
+          '<span style="font-size:13px;font-weight:700;color:'+C.green+'">'+esc(t.monthly)+'/mo</span></div>'+
+          '<div style="font-size:12px;color:'+C.muted+';margin-top:3px">'+esc(t.down)+' down · '+(t.enhanced?'Enhanced membership':'Base camping pass')+'</div></button>';
+      }).join("");
+      return header+'<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:10px">Pick your membership tier in Profile to see exactly what’s included.</div></div>'+
+        '<div style="padding:0 16px 8px">'+cards+
+        '<button class="btnG tap" data-act="nav" data-arg="profile" style="margin-top:4px">Set my tier in Profile</button></div>';
+    }
+
+    header += '<div style="font-size:13px;color:'+C.muted+';margin-top:2px">'+esc(def.label)+' · <b style="color:'+C.ink+'">'+esc(def.monthly)+'/mo</b> · '+esc(def.down)+' down</div></div>';
+
+    var sectionA = '<div class="det">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+        '<div class="dlabel" style="font-size:12px">What’s included</div>'+
+        '<button class="tap" data-act="nav" data-arg="profile" style="font-size:12px;font-weight:700;color:'+C.green+'">Change tier</button>'+
+      '</div>'+ perksSectionA(tierKey) + '</div>';
+
+    var sectionB = '<div class="det" style="border-color:rgba(207,90,38,.30);background:rgba(207,90,38,.04)">'+perksSectionB(tierKey)+'</div>';
+
+    var c2c = PERKS.bundled.c2c;
+    var bundled = '<div class="det">'+
+      '<div class="dlabel" style="font-size:12px">Bundled access</div>'+
+      '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:14px;font-weight:700">'+esc(c2c.title)+'</span>'+(c2c.confirmed?'':perksBadgeUnverified())+'</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">'+esc(c2c.detail)+'</div></div>';
+
+    var compare = '<div class="det">'+
+      '<button class="tap" data-act="perks-compare" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none">'+
+        '<span class="dlabel" style="font-size:12px">Compare all memberships</span>'+
+        '<span style="display:inline-flex;transform:rotate('+(state.perksCompare?'90':'0')+'deg);transition:transform .15s">'+ic("chevron",16,C.muted)+'</span></button>'+
+      (state.perksCompare ? '<div style="margin-top:12px">'+perksMatrixHTML()+'</div>' : '')+'</div>';
+
+    return header + sectionA + sectionB + bundled + compare +
+      '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;padding:0 24px 16px;line-height:1.5">Benefits reflect published TT membership literature — confirm specifics on your agreement before quoting a prospect.</div>';
   }
 
   function savingsCalc(){
@@ -1140,7 +1348,9 @@
       if (wi>-1) state.wallet.splice(wi,1); else state.wallet.push(arg);
       persist(); render();
     }
-    else if (act==="set-tier"){ if (TIERS[arg]){ state.tier=arg; persist(); render(); } }
+    else if (act==="set-tier"){ if (perksTierDef(arg)){ state.tier=arg; persist(); render(); } }
+    else if (act==="perks-toggle"){ state.perksExpanded[arg]=!state.perksExpanded[arg]; render(); }
+    else if (act==="perks-compare"){ state.perksCompare=!state.perksCompare; render(); }
     else if (act==="tools-radius"){ state.tools.radius=parseInt(arg,10); render(); }
     else if (act==="send-referral"){ var su=buildReferralSMS(); if(su){ window.location.href=su; } }
     else if (act==="add-booking"){ state.bookingForm=freshBookingForm(); state.addBooking=true; render(); }
