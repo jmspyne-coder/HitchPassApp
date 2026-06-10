@@ -1587,6 +1587,20 @@
     }
     return { window:net.window, maxDaysIn:net.maxStay, daysOut:0, parkToPark:false, tierAware:false };
   }
+  /* Configured max-stay (nights) for a network, tier-aware via effectiveBooking — READ from config,
+     never hardcoded. 0 means "no configured limit" (e.g. pa/gs) → callers show no warning. */
+  function maxStayFor(network){ return effectiveBooking({ network:network }).maxDaysIn || 0; }
+  function overStayInfo(network, dateIn, dateOut){
+    var limit = maxStayFor(network), nights = nightsBetween(dateIn, dateOut);
+    return (limit>0 && nights>limit) ? { nights:nights, limit:limit } : null;
+  }
+  /* Over-limit flag for a saved trip: prefer the flag captured at booking; fall back (legacy trips
+     saved before this shipped) to a tier-aware recompute. */
+  function tripOverStay(t){
+    if (t.overStay && typeof t.overStay==="object") return t.overStay;
+    if (t.overStay===false) return null;
+    return overStayInfo(t.network, t.dateIn, t.dateOut);
+  }
   function bookingInfo(p, dateInStr){
     var net = NETWORKS[p.network], eb = effectiveBooking(p);
     if (!net || !eb.window || !dateInStr) return null;
@@ -1914,6 +1928,10 @@
     var stayWarn = overStay
       ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+eb.maxDaysIn+'-night max stay.</div>'
       : "";
+    // Hard guard (live): departure must be after arrival. Blocks Add (handled in the addtrip action).
+    var dateErr = (state.dates.in && state.dates.out && nights<1)
+      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:700">'+ic("alert",14,C.clay)+'Departure must be after arrival.</div>'
+      : "";
 
     var num = (state.profile.members && state.profile.members[p.network]) || "";
     var memBlock = num
@@ -1926,7 +1944,7 @@
         '<div style="flex:1"><div class="dlabel">Arrival</div><input class="dinput" type="date" data-date="in" value="'+esc(state.dates.in)+'" /></div>'+
         '<div style="flex:1"><div class="dlabel">Departure</div><input class="dinput" type="date" data-date="out" value="'+esc(state.dates.out)+'" /></div>'+
       '</div>'+
-      bw + stayWarn + memBlock +
+      bw + stayWarn + dateErr + memBlock +
       '<button class="btnG tap" data-act="addtrip" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Add to my trips</button>'+
       '<button class="btnO tap" data-act="reserve" style="margin-top:10px">Reserve on '+esc(net.short)+' '+ic("ext",13,C.pine)+'</button>'+
       '</div>' + note();
@@ -1985,8 +2003,9 @@
     var bookedChip = t.booked ? '<span style="font-size:10.5px;color:'+C.green+';font-weight:700;background:rgba(47,107,70,.12);padding:2px 7px;border-radius:6px">Booked</span>' : "";
     var pillHTML = p ? pill(cost(p)) : "";
 
-    var stayWarn = (net && net.maxStay && nights>net.maxStay)
-      ? '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12px;font-weight:600">'+ic("alert",13,C.clay)+nights+' nights exceeds '+esc(net.short)+'’s '+net.maxStay+'-night max.</div>'
+    var os = net ? tripOverStay(t) : null;   // flag carried from booking (tier-aware), legacy trips recompute
+    var stayWarn = os
+      ? '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12px;font-weight:600">'+ic("alert",13,C.clay)+'Over limit · '+os.nights+' nights exceeds '+esc(net.short)+'’s '+os.limit+'-night max.</div>'
       : "";
 
     var actions = '<div style="display:flex;gap:8px;margin-top:12px">'+
@@ -2083,6 +2102,11 @@
       '</div>'+
       '<div style="margin-top:12px"><div class="dlabel">Confirmation # (optional)</div><input class="dinput" data-booking="confirmation" type="text" value="'+esc(f.confirmation)+'" placeholder="e.g. TT-48217" autocomplete="off" /></div>'+
       '<div style="margin-top:12px"><div class="dlabel">Notes (optional)</div><textarea class="dinput" data-booking="note" rows="3" placeholder="Site #, gate code, check-in time…" style="resize:vertical">'+esc(f.note)+'</textarea></div>'+
+      (function(){
+        var bNet = f.custom ? f.network : (f.parkId ? (parkById(f.parkId)||{}).network : "");
+        var bOver = (bNet && f.dateIn && f.dateOut) ? overStayInfo(bNet, f.dateIn, f.dateOut) : null;
+        return bOver ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+bOver.nights+' nights exceeds '+esc(NETWORKS[bNet].short)+'’s '+bOver.limit+'-night max stay.</div>' : '';
+      })()+
       (f.error ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+esc(f.error)+'</div>' : '')+
       '<button class="btnG tap" data-act="booking-save" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Save booking</button>'+
       '<button class="btnO tap" data-act="booking-cancel" style="margin-top:10px">Cancel</button>'+
@@ -2094,7 +2118,9 @@
     var hasPark = f.custom ? (!!f.parkName.trim() && !!f.network) : (f.parkId!=null);
     if (!hasPark){ f.error = f.custom ? "Enter a park name and pick a network." : "Search and pick a park, or use “Not in the list?”"; render(); return; }
     if (!f.dateIn || !f.dateOut){ f.error = "Pick your arrival and departure dates."; render(); return; }
+    if (nightsBetween(f.dateIn, f.dateOut) < 1){ f.error = "Departure must be after arrival."; render(); return; }
     var network = f.custom ? f.network : (parkById(f.parkId)||{}).network;
+    var os = overStayInfo(network, f.dateIn, f.dateOut);
     state.trips.push({
       id: Date.now(),
       parkId: f.custom ? null : f.parkId,
@@ -2103,7 +2129,8 @@
       network: network,
       confirmation: f.confirmation.trim(),
       note: f.note.trim(),
-      booked: true
+      booked: true,
+      overStay: os || false
     });
     persist();
     state.addBooking=false; state.bookingForm=freshBookingForm();
@@ -2116,7 +2143,6 @@
   }
 
   function walletCard(){
-    var members = state.profile.members || {};
     var rows = Object.keys(NETWORKS).filter(function(key){ return !NETWORKS[key].displayOnly; }).map(function(key){
       var n = NETWORKS[key];
       var held = state.wallet.indexOf(key) > -1;
@@ -2126,13 +2152,26 @@
           '<div style="flex:1"><div style="font-size:14px;font-weight:700">'+esc(n.name)+'</div>'+
             '<div style="font-size:11.5px;color:'+C.muted+'">'+sub+'</div></div>'+
           toggle+'</div>';
-      var memberLabel = n.memLabel ? esc(n.memLabel) : (esc(n.short)+" member #");
-      var numField = held ? inputRow("data-member",key,memberLabel,"text",members[key],"Member number") : "";
-      return row + numField;
+      return row;
     }).join("");
     return '<div class="det">'+
       '<div class="dlabel" style="font-size:12px">My wallet</div>'+
-      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Toggle the memberships you hold — this drives your Home stats, park access, and rates. Add a member number for one-tap copy at booking.</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Toggle the memberships you hold — this drives your Home stats, park access, and rates.</div>'+
+      rows+'</div>';
+  }
+
+  /* Membership numbers — one field per registry network (dc is display-only, excluded). Persisted on
+     state.profile.members via the existing data-member input path; surfaced for one-tap copy at booking. */
+  function memberNumbersCard(){
+    var members = state.profile.members || {};
+    var rows = Object.keys(NETWORKS).filter(function(key){ return !NETWORKS[key].displayOnly; }).map(function(key){
+      var n = NETWORKS[key];
+      var label = n.memLabel ? esc(n.memLabel) : (esc(n.short)+" member #");
+      return inputRow("data-member", key, label, "text", members[key], "Member number");
+    }).join("");
+    return '<div class="det">'+
+      '<div class="dlabel" style="font-size:12px">Membership numbers</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Stored on this device. Used for one-tap copy on a park’s booking screen.</div>'+
       rows+'</div>';
   }
 
@@ -2155,6 +2194,7 @@
         '<div style="font-size:12.5px;color:'+C.muted+'">Your wallet, tier, and referral setup</div>'+
       '</div>'+
       walletCard()+
+      memberNumbersCard()+
       tierCard()+
       '<div class="det">'+
         '<div class="dlabel" style="font-size:12px">Referral setup</div>'+
@@ -2544,7 +2584,9 @@
       var pk=parkById(state.selected);
       if (!pk) return;
       if (!state.dates.in || !state.dates.out){ alert("Pick your arrival and departure dates first."); return; }
-      state.trips.push({ id:Date.now(), parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network });
+      if (nightsBetween(state.dates.in, state.dates.out) < 1){ render(); return; }   // dep<=arr → blocked; inline error shows
+      var os = overStayInfo(pk.network, state.dates.in, state.dates.out);
+      state.trips.push({ id:Date.now(), parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network, overStay: os || false });
       persist();
       state.tab="trips"; state.selected=null; render();
     }
@@ -2602,7 +2644,7 @@
     var d = t.getAttribute("data-date");
     if (d){ state.dates[d]=t.value; render(); return; }
     var bd = t.getAttribute("data-bdate");
-    if (bd){ state.bookingForm[bd==="in"?"dateIn":"dateOut"]=t.value; return; }
+    if (bd){ state.bookingForm[bd==="in"?"dateIn":"dateOut"]=t.value; render(); return; }   // re-render for live over-limit warning
     var bk = t.getAttribute("data-booking");
     if (bk){ state.bookingForm[bk]=t.value; return; }
   });
