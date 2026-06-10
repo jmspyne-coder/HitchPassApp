@@ -1507,6 +1507,7 @@
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
     account: { email:"", stage:"email", busy:false, error:"", session:null, subStatus:null },  // Supabase auth UI state (Supabase persists the session itself)
     isPaid: false,   // entitlement read from Supabase (display only — NOTHING is gated on this yet)
+    authChecked: false,   // true once getSession (local-storage, offline-safe) has resolved on boot
     selected: null, dates: { in:"", out:"" },
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
@@ -2207,8 +2208,9 @@
   /* ---- Auth flow (email OTP code). All async; re-render on completion. Never throws if sb is null. ---- */
   function initAuth(){
     if (!sb) return;
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; refreshSubscription(); render(); }).catch(function(){});
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; if (session) refreshSubscription(); else { state.isPaid=false; state.account.subStatus=null; } render(); });
+    // getSession reads the cached session from local storage (NO network) → offline-safe entry.
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); render(); }).catch(function(){ state.authChecked = true; render(); });
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; if (session) refreshSubscription(); else { state.isPaid=false; state.account.subStatus=null; } render(); });
     // Returning from Stripe Checkout: the webhook may lag a moment, so re-read once after a short delay too.
     if (typeof location !== "undefined" && /[?&]checkout=success/.test(location.search || "")){
       refreshSubscription();
@@ -2624,9 +2626,56 @@
     }).join("")+'</div>';
   }
 
+  function signedIn(){ return !!(state.account.session && state.account.session.user); }
+
+  function hitchMark(size){
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 512 512" role="img" aria-label="Hitch Pass" xmlns="http://www.w3.org/2000/svg">'+
+      '<rect width="512" height="512" rx="114" fill="#E8461E"/>'+
+      '<g transform="translate(40,41.8) scale(1.8)" fill="#fff">'+
+        '<circle cx="142" cy="80" r="34"/><path d="M126,108 L158,108 L166,132 L118,132 Z"/>'+
+        '<rect x="106" y="130" width="74" height="20" rx="4"/><rect x="154" y="146" width="26" height="44"/>'+
+        '<rect x="60" y="170" width="120" height="22" rx="4"/></g></svg>';
+  }
+  function frontDoorShell(inner){
+    return '<div style="position:fixed;inset:0;background:#1f3d2c;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;overflow:auto">'+
+      hitchMark(74)+
+      '<div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1">Hitch Pass</div>'+
+      '<div style="width:100%;max-width:320px">'+inner+'</div>'+
+      '<div style="position:absolute;bottom:24px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;text-align:center;padding:0 24px">Unofficial · made by a customer, not the company</div></div>';
+  }
+  function authLoadingView(){
+    return frontDoorShell('<div style="text-align:center;color:#a9bdab;font-size:13px">Loading your wallet…</div>');
+  }
+  /* The email login as the ENTRY screen. Reuses the exact magic-link wiring (data-auth/email,
+     auth-sendlink/resend/back, the "sent" confirmation) — only the placement is the front door. */
+  function frontDoorView(){
+    var a = state.account;
+    var err = a.error ? '<div style="margin-top:10px;color:#f0a070;font-size:12.5px;font-weight:600;text-align:center">'+esc(a.error)+'</div>' : "";
+    var fld = 'width:100%;padding:13px 16px;border-radius:12px;border:none;font-size:16px;outline:none;font-family:inherit';
+    if (a.stage === "sent"){
+      return frontDoorShell(
+        '<div style="color:#faf6ec;font-size:15px;font-weight:700;text-align:center">Check your email</div>'+
+        '<div style="color:#a9bdab;font-size:13px;margin-top:8px;line-height:1.5;text-align:center">We sent a sign-in link to <b style="color:#faf6ec">'+esc(a.email)+'</b>. Tap it to sign in — it opens right back here. (Check spam if needed.)</div>'+
+        err +
+        '<button class="tap" data-act="auth-resend" style="margin-top:16px;width:100%;color:#e0875a;font-weight:700;font-size:13.5px;background:none">Resend link</button>'+
+        '<button class="tap" data-act="auth-back" style="margin-top:6px;width:100%;color:rgba(255,255,255,.55);font-weight:700;font-size:13px;background:none">Use a different email</button>');
+    }
+    return frontDoorShell(
+      '<div style="color:#a9bdab;font-size:13.5px;line-height:1.5;text-align:center;margin-bottom:14px">Sign in with your email — we’ll email you a one-tap link. No password, no code.</div>'+
+      '<input id="fde" data-auth="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="'+esc(a.email)+'" style="'+fld+'" />'+
+      err +
+      '<button class="tap" data-act="auth-sendlink" style="margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button>');
+  }
+
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
+    // FRONT DOOR: when Supabase is available, gate entry on the (locally-cached, offline-safe) session.
+    // - still checking the cached session -> brief branded loading (no flash of the login)
+    // - checked + no session -> the email front-door login (occupies the old passcode-gate slot)
+    // - signed in -> the app.  sb===null (Supabase unreachable) -> never lock out: fall through to the app.
+    if (sb && !state.authChecked){ app.innerHTML = authLoadingView(); return; }
+    if (sb && state.authChecked && !signedIn()){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
