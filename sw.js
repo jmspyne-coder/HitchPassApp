@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v3";
+var CACHE = "hitchpass-v4";
 
 /* Same-origin shell — must all cache or install fails (these always exist).
    Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */
@@ -17,9 +17,10 @@ var LOCAL = [
   "./icon-maskable-512.png?v=2"
 ];
 
-/* Cross-origin (Google Fonts CSS) — best-effort, never fail install offline. */
+/* Cross-origin (Google Fonts CSS, Supabase JS) — best-effort, never fail install offline. */
 var EXTERNAL = [
-  "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+  "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&display=swap",
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"
 ];
 
 self.addEventListener("install", function(e){
