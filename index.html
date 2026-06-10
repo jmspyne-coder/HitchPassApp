@@ -1505,7 +1505,7 @@
     tier: saved.tier || "adventure",
     q: "", netFilter: "", freeOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
-    account: { email:"", stage:"email", busy:false, error:"", session:null, subStatus:null },  // Supabase auth UI state (Supabase persists the session itself)
+    account: { email:"", stage:"email", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
     isPaid: false,   // entitlement read from Supabase (display only — NOTHING is gated on this yet)
     authChecked: false,   // true once getSession (local-storage, offline-safe) has resolved on boot
     selected: null, dates: { in:"", out:"" },
@@ -2231,16 +2231,24 @@
   function authSubscribe(plan){
     var a = state.account;
     if (!sb || !a.session){ a.error = "Sign in first to subscribe."; render(); return; }
-    a.busy = true; a.error = ""; render();
+    a.busy = true; a.error = ""; a.payUnavailable = false; render();
     fetch("/api/create-checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + a.session.access_token },
       body: JSON.stringify({ plan: plan })
     }).then(function(r){ return r.json(); }).then(function(d){
       if (d && d.url){ window.location.href = d.url; }
-      else { a.busy = false; a.error = (d && d.error) || "Couldn’t start checkout."; render(); }
-    }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
+      else { a.busy = false; a.payUnavailable = true; a.error = (d && d.error) || "Payments aren’t live yet."; render(); }
+    }).catch(function(){ a.busy = false; a.payUnavailable = true; a.error = "Payments aren’t live yet."; render(); });
   }
+  /* "Has this user chosen a plan?" — paid (active sub) OR a per-user local free flag. */
+  function planKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_plan_choice:" + u.id) : null; }
+  function hasChosenPlan(){
+    if (state.isPaid) return true;
+    var k = planKey(); if (!k) return false;
+    try { return localStorage.getItem(k) === "free"; } catch (e) { return false; }
+  }
+  function choosePlanFree(){ var k = planKey(); if (k){ try { localStorage.setItem(k, "free"); } catch (e) {} } render(); }
   var AUTH_REDIRECT = "https://hitch-pass-app.vercel.app";
   function authSendLink(){
     var a = state.account;
@@ -2269,11 +2277,12 @@
       var planLabel = state.isPaid ? "Active" : "Free";
       var planColor = state.isPaid ? C.green : C.muted;
       var planBadge = '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>';
+      var payNote = a.payUnavailable ? '<div style="font-size:11.5px;color:'+C.clay+';font-weight:600;margin-top:8px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>' : "";
       var subBlock = state.isPaid
-        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for supporting Hitch Pass. Your plan is active — every feature stays open to everyone for now.</div>'
-        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Subscribe to support the app. (Nothing is locked — this just backs development.)</div>'+
-          '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Subscribe · $54/yr ($4.50/mo)")+'</button>'+
-          '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Subscribe · $6.50/mo</button>';
+        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — every feature stays open to everyone for now.</div>'
+        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to support the app and unlock everything (nothing is locked yet — this backs development).</div>'+
+          '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
+          '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote;
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px">'+
           '<div style="font-size:13.5px">Signed in as <b>'+esc(a.session.user.email||"")+'</b></div>'+planBadge+
@@ -2667,6 +2676,34 @@
       '<button class="tap" data-act="auth-sendlink" style="margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button>');
   }
 
+  /* One-time onboarding plan choice — shown to a signed-in user who hasn't chosen yet.
+     Reuses the 1.2 create-checkout for Pro; "Start free" sets the per-user local flag. NO feature gating. */
+  function planChoiceView(){
+    var a = state.account;
+    var card = "background:#faf6ec;border-radius:14px;padding:15px 16px;text-align:left;width:100%";
+    var btnGreen = "margin-top:12px;width:100%;padding:12px;border-radius:11px;background:#1f3d2c;color:#faf6ec;font-weight:700;font-size:14.5px";
+    var btnOrange = "margin-top:10px;width:100%;padding:12px;border-radius:11px;background:#cf5a26;color:#fff;font-weight:700;font-size:14.5px";
+    var btnOutline = "margin-top:8px;width:100%;padding:11px;border-radius:11px;border:1px solid rgba(31,28,23,.25);background:#fff;color:#1f3d2c;font-weight:700;font-size:13.5px";
+    var free = '<div style="'+card+';margin-bottom:12px">'+
+      '<div style="font-weight:800;font-size:16px;color:#1f1c17">Free</div>'+
+      '<div style="font-size:12px;color:#5b5446;margin-top:5px;line-height:1.5">Full park map, Explore, search, network + region filters, view your membership cards, and up to 2 saved trips.</div>'+
+      '<button class="tap" data-act="plan-free" style="'+btnGreen+'">Start free</button></div>';
+    var proInner = a.payUnavailable
+      ? '<div style="font-size:12px;color:'+C.clay+';font-weight:600;margin-top:10px;line-height:1.5">Payments aren’t live yet — start free for now; you can upgrade later in Profile.</div>'
+      : '<button class="tap" data-act="auth-subscribe" data-arg="annual" style="'+btnOrange+'"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Go Pro · $54/yr ($4.50/mo)")+'</button>'+
+        '<button class="tap" data-act="auth-subscribe" data-arg="monthly" style="'+btnOutline+'"'+(a.busy?" disabled":"")+'>Go Pro · $6.50/mo</button>';
+    var pro = '<div style="'+card+';border:2px solid #cf5a26">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-weight:800;font-size:16px;color:#1f1c17">Pro</div>'+
+        '<div style="font-size:12px;font-weight:800;color:#cf5a26">$4.50/mo</div></div>'+
+      '<div style="font-size:12px;color:#5b5446;margin-top:5px;line-height:1.5">Everything in Free, plus unlimited trips, max-stay + booking-window alerts, member numbers + one-tap copy, the Payback calculator, Coverage-near-a-prospect, and Perks/tier intelligence.</div>'+
+      '<div style="font-size:11px;color:#867d6c;margin-top:7px">$4.50/mo billed annually ($54/yr), or $6.50/mo</div>'+
+      proInner + '</div>';
+    return frontDoorShell(
+      '<div style="color:#faf6ec;font-size:21px;font-weight:800;text-align:center">Choose your plan</div>'+
+      '<div style="color:#a9bdab;font-size:12px;text-align:center;margin:5px 0 16px">You can change this later in Profile.</div>'+
+      free + pro);
+  }
+
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
@@ -2676,6 +2713,7 @@
     // - signed in -> the app.  sb===null (Supabase unreachable) -> never lock out: fall through to the app.
     if (sb && !state.authChecked){ app.innerHTML = authLoadingView(); return; }
     if (sb && state.authChecked && !signedIn()){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
+    if (sb && state.authChecked && signedIn() && !hasChosenPlan()){ app.innerHTML = planChoiceView(); return; }   // one-time onboarding choice
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
@@ -2737,6 +2775,7 @@
     else if (act==="auth-resend"){ authSendLink(); }
     else if (act==="auth-back"){ state.account.stage="email"; state.account.error=""; render(); }
     else if (act==="auth-subscribe"){ authSubscribe(arg); }
+    else if (act==="plan-free"){ choosePlanFree(); }
     else if (act==="auth-signout"){ authSignOut(); }
     else if (act==="wallet-toggle"){
       var wi=state.wallet.indexOf(arg);
