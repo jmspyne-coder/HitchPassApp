@@ -1479,6 +1479,11 @@
     { id:1251, name:"Zephyr RV Park", city:"Deming", st:"NM", network:"rpi", lat:32.2740611, lng:-107.5709645 }
   ];
 
+  /* Parks per network (data-driven). Networks with zero mapped parks (hh/pa/gs) are membership-only:
+     on Home cards they get a uniform "Membership" badge instead of an invented park count. */
+  var PARK_NET_COUNT = (function(){ var m={}; PARKS.forEach(function(p){ m[p.network]=(m[p.network]||0)+1; }); return m; })();
+  function isMembershipNet(id){ var n=NETWORKS[id]; return !!(n && n.cardOnly) || !(PARK_NET_COUNT[id]>0); }
+
   var KEY = "hitchpass.v1";
   function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
   function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }
@@ -1614,17 +1619,22 @@
   ];
 
   function homeView(){
-    var held = state.wallet.map(function(id){ return NETWORKS[id]; }).filter(Boolean);
-    var union = held.reduce(function(s,n){ return s + (n.count||0); }, 0);
+    var heldIds = state.wallet.filter(function(id){ return NETWORKS[id]; });
+    var held = heldIds.map(function(id){ return NETWORKS[id]; });
+    // "locations" counts only networks with mapped parks; membership-only nets contribute 0.
+    var union = heldIds.reduce(function(s,id){ return s + (isMembershipNet(id) ? 0 : (NETWORKS[id].count||0)); }, 0);
     var chips = held.length
       ? held.map(function(n){ return '<span class="chip">'+n.short+'</span>'; }).join("")
       : '<span style="color:#cdbfa6;font-size:12px">No cards yet — add them in Profile</span>';
-    var parkNets = held.filter(function(n){ return !n.cardOnly; });
-    var stats = parkNets.map(function(n){
-      return '<div class="stat"><div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1">'+
-        n.count+'</div><div style="color:#cdbfa6;font-size:13px;margin-top:3px">'+esc(n.name)+'</div></div>';
+    // Park-count cards show the number; membership-only cards (hh/pa/gs) show a uniform badge.
+    var stats = heldIds.map(function(id){
+      var n = NETWORKS[id];
+      var headEl = isMembershipNet(id)
+        ? '<span style="display:inline-block;background:rgba(255,255,255,.16);color:#faf6ec;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px">Membership</span>'
+        : '<div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1">'+n.count+'</div>';
+      return '<div class="stat">'+headEl+'<div style="color:#cdbfa6;font-size:13px;margin-top:8px">'+esc(n.name)+'</div></div>';
     }).join("");
-    var statCols = parkNets.length>1 ? "1fr 1fr" : "1fr";
+    var statCols = heldIds.length>1 ? "1fr 1fr" : "1fr";
     function tile(name,color,title,sub,arg){
       return '<button class="tile tap" data-act="nav" data-arg="'+arg+'">'+
         '<div class="tileIc" style="background:'+color+'">'+ic(name,22,"#faf6ec")+'</div>'+
@@ -1759,21 +1769,39 @@
       '</div>'+ body;
   }
 
-  /* ---- Explore map (Leaflet, lazy-loaded from CDN, online-only) ---- */
+  /* ---- Explore map (Leaflet + Leaflet.markercluster, lazy-loaded from CDN, online-only) ---- */
+  function addMapCss(id, href){
+    if (document.getElementById(id)) return;
+    var lk=document.createElement("link"); lk.id=id; lk.rel="stylesheet"; lk.href=href; document.head.appendChild(lk);
+  }
+  function clusterReady(){ return typeof L!=="undefined" && typeof L.markerClusterGroup==="function"; }
   function ensureLeaflet(cb){
-    if (typeof L!=="undefined"){ cb(); return; }
-    if (!document.getElementById("leaflet-css")){
-      var lk=document.createElement("link"); lk.id="leaflet-css"; lk.rel="stylesheet";
-      lk.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(lk);
+    if (clusterReady()){ cb(); return; }
+    addMapCss("leaflet-css","https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
+    addMapCss("mcluster-css","https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css");
+    addMapCss("mcluster-css-def","https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css");
+    /* markercluster (1.5.x, Leaflet-1.x compatible) must load AFTER Leaflet core. */
+    function loadCluster(){
+      if (typeof L.markerClusterGroup==="function"){ cb(); return; }
+      var mc=document.getElementById("mcluster-js");
+      if (!mc){
+        mc=document.createElement("script"); mc.id="mcluster-js";
+        mc.src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js";
+        mc.onload=function(){ cb(); };
+        mc.onerror=function(){ cb(); };   // degrade to un-clustered markers (initExploreMap checks)
+        document.head.appendChild(mc);
+      } else {
+        var iv2=setInterval(function(){ if(typeof L.markerClusterGroup==="function"){ clearInterval(iv2); cb(); } }, 60);
+      }
     }
     var sc=document.getElementById("leaflet-js");
     if (!sc){
       sc=document.createElement("script"); sc.id="leaflet-js"; sc.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      sc.onload=function(){ cb(); };
+      sc.onload=function(){ loadCluster(); };
       sc.onerror=function(){ var h=document.getElementById("mapHost"); if(h) h.innerHTML='<div style="padding:30px 20px;text-align:center;color:'+C.muted+';font-size:13.5px">Map needs a connection. Switch to List to browse offline.</div>'; };
       document.head.appendChild(sc);
     } else {
-      var iv=setInterval(function(){ if(typeof L!=="undefined"){ clearInterval(iv); cb(); } }, 60);
+      var iv=setInterval(function(){ if(typeof L!=="undefined"){ clearInterval(iv); loadCluster(); } }, 60);
     }
   }
   function teardownMap(){ if (mapInstance){ try{ mapInstance.remove(); }catch(e){} mapInstance=null; } }
@@ -1786,15 +1814,22 @@
       var pts=filteredParks().filter(hasCoord);
       if (pts.length){
         var bounds=[], present={};
+        // Cluster overlapping pins; rebuilt from the CURRENT filtered set on every render.
+        // Falls back to direct markers if the plugin didn't load (offline first run, etc.).
+        var cluster = (typeof L.markerClusterGroup==="function")
+          ? L.markerClusterGroup({ showCoverageOnHover:false, spiderfyOnMaxZoom:true, chunkedLoading:true, maxClusterRadius:50 })
+          : null;
         pts.forEach(function(p){
           var nw=NETWORKS[p.network]||{}, col=nw.color||C.ember;
           present[p.network]=true;
-          var m=L.circleMarker([p.lat,p.lng],{ radius:6, weight:2, color:"#fff", fillColor:col, fillOpacity:.95 }).addTo(mapInstance);
+          var m=L.circleMarker([p.lat,p.lng],{ radius:6, weight:2, color:"#fff", fillColor:col, fillOpacity:.95 });
           m.bindPopup('<div style="min-width:150px"><div class="disp" style="font-weight:800;font-size:14px">'+esc(p.name)+'</div>'+
             '<div style="font-size:12px;color:#867d6c;margin:2px 0 8px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(nw.short||p.network)+'</div>'+
             '<button type="button" data-mappark="'+p.id+'" style="background:'+C.ember+';color:#fff;border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer">Open details ›</button></div>');
+          if (cluster) cluster.addLayer(m); else m.addTo(mapInstance);
           bounds.push([p.lat,p.lng]);
         });
+        if (cluster) mapInstance.addLayer(cluster);
         mapInstance.fitBounds(bounds,{ padding:[28,28], maxZoom:9 });
         // legend — one entry per network present in the current view
         var legend=L.control({ position:"bottomright" });
@@ -2282,11 +2317,16 @@
 
     header += '<div style="font-size:13px;color:'+C.muted+';margin-top:2px">'+esc(def.label)+' · <b style="color:'+C.ink+'">'+esc(def.monthly)+'/mo</b> · '+esc(def.down)+' down</div></div>';
 
+    // Inline tier picker — sets state.tier via the same set-tier action the Profile selector uses;
+    // the matrix below re-renders in place (no round-trip to Profile).
+    var tierPicker = '<div class="det"><div class="dlabel" style="font-size:12px">My tier</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">'+
+        PERKS.tiers.map(function(t){ return '<button class="fchip tap'+(tierKey===t.key?" on":"")+'" data-act="set-tier" data-arg="'+t.key+'">'+esc(t.label)+'</button>'; }).join("")+
+      '</div></div>';
+
     var sectionA = '<div class="det">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
-        '<div class="dlabel" style="font-size:12px">What’s included</div>'+
-        '<button class="tap" data-act="nav" data-arg="profile" style="font-size:12px;font-weight:700;color:'+C.green+'">Change tier</button>'+
-      '</div>'+ perksSectionA(tierKey) + '</div>';
+      '<div class="dlabel" style="font-size:12px">What’s included</div>'+
+      perksSectionA(tierKey) + '</div>';
 
     var sectionB = '<div class="det" style="border-color:rgba(207,90,38,.30);background:rgba(207,90,38,.04)">'+perksSectionB(tierKey)+'</div>';
 
@@ -2302,7 +2342,7 @@
         '<span style="display:inline-flex;transform:rotate('+(state.perksCompare?'90':'0')+'deg);transition:transform .15s">'+ic("chevron",16,C.muted)+'</span></button>'+
       (state.perksCompare ? '<div style="margin-top:12px">'+perksMatrixHTML()+'</div>' : '')+'</div>';
 
-    return header + sectionA + sectionB + bundled + compare +
+    return header + tierPicker + sectionA + sectionB + bundled + compare +
       '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;padding:0 24px 16px;line-height:1.5">Benefits reflect published TT membership literature — confirm specifics on your agreement before quoting a prospect.</div>';
   }
 

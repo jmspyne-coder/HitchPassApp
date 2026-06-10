@@ -53,7 +53,9 @@ self.addEventListener("fetch", function(e){
     return;
   }
 
-  /* Everything else (icons, fonts, Leaflet JS/CSS, tiles): cache-first, runtime-cache. */
+  /* Everything else (icons, fonts, Leaflet + markercluster JS/CSS, map tiles): cache-first,
+     runtime-cache. Leaflet/markercluster are CDN assets cached on first fetch (not pre-cached),
+     so offline works after the first online map load. */
   e.respondWith(
     caches.match(req).then(function(cached){
       if (cached) return cached;
