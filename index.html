@@ -83,6 +83,28 @@
     gs:  { short:"Good Sam", name:"Good Sam",                   count:2000, tier:"discounted", price:"10% off rate",       window:0,   maxStay:0,  url:"https://goodsam.com" }
   };
 
+  /* Region is DERIVED from a park's `st` via this fixed lookup — no region column, no data change.
+     Covers all 59 state/province/territory codes in the 1251-park dataset; every park resolves to
+     exactly one region (no Other/Unknown bucket). */
+  var STATE_REGION = {
+    FL:"Southeast", GA:"Southeast", SC:"Southeast", NC:"Southeast", TN:"Southeast", KY:"Southeast",
+    VA:"Southeast", AL:"Southeast", MS:"Southeast", AR:"Southeast", LA:"Southeast",
+    CA:"Pacific", OR:"Pacific", WA:"Pacific",
+    AZ:"Southwest", NM:"Southwest", NV:"Southwest",
+    OH:"Midwest", IN:"Midwest", IL:"Midwest", MI:"Midwest", WI:"Midwest", MN:"Midwest", IA:"Midwest", MO:"Midwest",
+    NY:"Northeast", PA:"Northeast", NJ:"Northeast", MA:"Northeast", ME:"Northeast", NH:"Northeast",
+    CT:"Northeast", RI:"Northeast", VT:"Northeast", DE:"Northeast",
+    TX:"Texas",
+    CO:"Mountain", ID:"Mountain", MT:"Mountain", UT:"Mountain", WY:"Mountain",
+    ON:"Canada", BC:"Canada", QC:"Canada", NS:"Canada", NB:"Canada", AB:"Canada", MB:"Canada",
+    PE:"Canada", SK:"Canada", NL:"Canada",
+    ND:"Plains", SD:"Plains", NE:"Plains", KS:"Plains", OK:"Plains",
+    AK:"Alaska",
+    SO:"Mexico", MX:"Mexico"
+  };
+  var REGION_ORDER = ["Southeast","Pacific","Southwest","Midwest","Northeast","Texas","Mountain","Canada","Plains","Alaska","Mexico"];
+  function regionOf(p){ return STATE_REGION[p.st]; }
+
   var TIER = {
     included:   { bg:"rgba(47,107,70,.12)",  fg:"#2f6b46", label:"$0" },
     discounted: { bg:"rgba(207,90,38,.12)",  fg:"#cf5a26", label:"$"  },
@@ -1469,6 +1491,7 @@
     profile: saved.profile || { members:{}, rigLength:null },
     tier: saved.tier || "adventure",
     q: "", netFilter: "", freeOnly: false,
+    regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
     selected: null, dates: { in:"", out:"" },
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
@@ -1631,14 +1654,28 @@
 
   var EXPLORE_PER_PAGE = 24;
 
+  /* All non-region axes (network, $0-only, search). Region is applied separately so chip counts can
+     reflect "results within the current network selection" independent of the region choice. */
+  function passesNonRegion(p, q){
+    if (state.netFilter && p.network!==state.netFilter) return false;
+    if (state.freeOnly && cost(p).tier!=="included") return false;
+    if (q){ if ((p.name+" "+p.city+" "+p.st).toLowerCase().indexOf(q)===-1) return false; }
+    return true;
+  }
   function filteredParks(){
     var q = state.q.trim().toLowerCase();
+    var hasReg = state.regionFilter.size>0;
     return PARKS.filter(function(p){
-      if (state.netFilter && p.network!==state.netFilter) return false;
-      if (state.freeOnly && cost(p).tier!=="included") return false;
-      if (q){ if ((p.name+" "+p.city+" "+p.st).toLowerCase().indexOf(q)===-1) return false; }
+      if (!passesNonRegion(p,q)) return false;
+      if (hasReg && !state.regionFilter.has(regionOf(p))) return false;   // region: independent geographic AND axis
       return true;
     });
+  }
+  /* Per-region live counts within the current non-region selection (drives chip labels + 0-hiding). */
+  function regionCounts(){
+    var q = state.q.trim().toLowerCase(), m = {};
+    PARKS.forEach(function(p){ if (passesNonRegion(p,q)){ var r=regionOf(p); m[r]=(m[r]||0)+1; } });
+    return m;
   }
   function hasCoord(p){ return typeof p.lat==="number" && typeof p.lng==="number"; }
 
@@ -1654,7 +1691,7 @@
           '<span class="disp" style="font-size:17px;font-weight:800">'+esc(p.name)+'</span>'+
           '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short)+'</span>'+
         '</div>'+
-        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+(p.network==="tt"&&p.region?' · '+esc(p.region):'')+'</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(regionOf(p))+'</div>'+
         '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+tags+'</div>'+
       '</div>'+ic("chevron",18,C.muted)+'</button>';
   }
@@ -1699,6 +1736,14 @@
     var chips = '<button class="fchip tap'+(state.netFilter===""?" on":"")+'" data-act="netfilter" data-arg="">All</button>';
     Object.keys(NETWORKS).forEach(function(id){ if (present[id] && !NETWORKS[id].cardOnly) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
     var freeChip = '<button class="fchip tap'+(state.freeOnly?" on":"")+'" data-act="freeonly">$0 in my wallet</button>';
+    // Region chips: REGION_ORDER, live count within current network selection, 0-count regions hidden.
+    var rc = regionCounts();
+    var regionChips = '<button class="fchip tap'+(state.regionFilter.size===0?" on":"")+'" data-act="regionall">All regions</button>';
+    REGION_ORDER.forEach(function(r){
+      var n = rc[r]||0; if (!n) return;   // hide regions with no parks under the current network filter
+      regionChips += '<button class="fchip tap'+(state.regionFilter.has(r)?" on":"")+'" data-act="regionfilter" data-arg="'+esc(r)+'">'+esc(r)+' '+n+'</button>';
+    });
+    var regionRow = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+regionChips+'</div>';
     var toggle = '<div style="display:flex;gap:4px;margin-top:11px;background:#e6dfd0;border-radius:11px;padding:3px">'+modeBtn("list","List")+modeBtn("map","Map")+'</div>';
     var body = state.exploreMode==="map"
       ? mapNoteHTML()+'<div id="mapHost" style="height:60vh;margin:6px 16px 16px;border-radius:14px;overflow:hidden;border:1px solid rgba(31,28,23,.12);background:#dfe6df"></div>'
@@ -1709,6 +1754,7 @@
         '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:12px">Everywhere your wallet can take you</div>'+
         '<input id="q" class="q" placeholder="Search parks or cities" value="'+esc(state.q)+'" />'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+freeChip+'</div>'+
+        regionRow+
         toggle+
       '</div>'+ body;
   }
@@ -1786,7 +1832,7 @@
       '<div class="det">'+
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">'+
           '<div><div class="disp" style="font-size:23px;font-weight:800;line-height:1.1">'+esc(p.name)+'</div>'+
-          '<div style="font-size:13px;color:'+C.muted+';margin-top:3px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+(p.network==="tt"&&p.region?' · '+esc(p.region):'')+' · '+esc(net.name)+'</div></div>'+
+          '<div style="font-size:13px;color:'+C.muted+';margin-top:3px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(regionOf(p))+' · '+esc(net.name)+'</div></div>'+
         '</div>'+
         '<div style="margin-top:10px">'+pill(ci)+'</div>';
 
@@ -2441,6 +2487,8 @@
     else if (act==="back"){ state.selected=null; render(); }
     else if (act==="netfilter"){ state.netFilter=arg; state.explorePage=1; render(); }
     else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; state.explorePage=1; render(); }
+    else if (act==="regionfilter"){ if (state.regionFilter.has(arg)) state.regionFilter.delete(arg); else state.regionFilter.add(arg); state.explorePage=1; render(); }
+    else if (act==="regionall"){ state.regionFilter.clear(); state.explorePage=1; render(); }
     else if (act==="explore-mode"){ if (state.exploreMode!==arg){ state.exploreMode=arg; render(); } }
     else if (act==="explore-page"){
       state.explorePage += (arg==="next"?1:-1);
