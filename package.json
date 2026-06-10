@@ -1,0 +1,10 @@
+{
+  "name": "hitch-pass-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hitch Pass — serverless API (Stripe checkout + webhook). The app itself is static index.html.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "stripe": "^16.12.0"
+  }
+}

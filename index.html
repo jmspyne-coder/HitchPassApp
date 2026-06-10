@@ -1505,7 +1505,8 @@
     tier: saved.tier || "adventure",
     q: "", netFilter: "", freeOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
-    account: { email:"", stage:"email", busy:false, error:"", session:null },  // Supabase auth UI state (Supabase persists the session itself)
+    account: { email:"", stage:"email", busy:false, error:"", session:null, subStatus:null },  // Supabase auth UI state (Supabase persists the session itself)
+    isPaid: false,   // entitlement read from Supabase (display only — NOTHING is gated on this yet)
     selected: null, dates: { in:"", out:"" },
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
@@ -2206,8 +2207,37 @@
   /* ---- Auth flow (email OTP code). All async; re-render on completion. Never throws if sb is null. ---- */
   function initAuth(){
     if (!sb) return;
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; render(); }).catch(function(){});
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; render(); });
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; refreshSubscription(); render(); }).catch(function(){});
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; if (session) refreshSubscription(); else { state.isPaid=false; state.account.subStatus=null; } render(); });
+    // Returning from Stripe Checkout: the webhook may lag a moment, so re-read once after a short delay too.
+    if (typeof location !== "undefined" && /[?&]checkout=success/.test(location.search || "")){
+      refreshSubscription();
+      setTimeout(refreshSubscription, 3500);
+    }
+  }
+  /* Reads the user's subscription row (RLS = own row only) and computes isPaid. Display only — no gating. */
+  function refreshSubscription(){
+    if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return; }
+    sb.from("subscriptions").select("status,current_period_end").maybeSingle().then(function(r){
+      var row = r && r.data;
+      var future = row && row.current_period_end && (new Date(row.current_period_end).getTime() > Date.now());
+      state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && future);
+      state.account.subStatus = row ? row.status : null;
+      render();
+    }).catch(function(){});
+  }
+  function authSubscribe(plan){
+    var a = state.account;
+    if (!sb || !a.session){ a.error = "Sign in first to subscribe."; render(); return; }
+    a.busy = true; a.error = ""; render();
+    fetch("/api/create-checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + a.session.access_token },
+      body: JSON.stringify({ plan: plan })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d && d.url){ window.location.href = d.url; }
+      else { a.busy = false; a.error = (d && d.error) || "Couldn’t start checkout."; render(); }
+    }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
   }
   var AUTH_REDIRECT = "https://hitch-pass-app.vercel.app";
   function authSendLink(){
@@ -2224,7 +2254,7 @@
   }
   function authSignOut(){
     if (!sb) return;
-    sb.auth.signOut().then(function(){ state.account.session = null; state.account.stage = "email"; state.account.email = ""; render(); }).catch(function(){});
+    sb.auth.signOut().then(function(){ state.account.session = null; state.account.stage = "email"; state.account.email = ""; state.isPaid = false; state.account.subStatus = null; render(); }).catch(function(){});
   }
   function accountCard(){
     var a = state.account;
@@ -2234,10 +2264,21 @@
     }
     var err = a.error ? '<div style="margin-top:10px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+esc(a.error)+'</div>' : "";
     if (a.session && a.session.user){
+      var planLabel = state.isPaid ? "Active" : "Free";
+      var planColor = state.isPaid ? C.green : C.muted;
+      var planBadge = '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>';
+      var subBlock = state.isPaid
+        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for supporting Hitch Pass. Your plan is active — every feature stays open to everyone for now.</div>'
+        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Subscribe to support the app. (Nothing is locked — this just backs development.)</div>'+
+          '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Subscribe · $54/yr ($4.50/mo)")+'</button>'+
+          '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Subscribe · $6.50/mo</button>';
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
-        '<div style="font-size:13.5px;margin-top:7px">Signed in as <b>'+esc(a.session.user.email||"")+'</b></div>'+
-        '<div style="font-size:12px;color:'+C.muted+';margin-top:4px;line-height:1.5">Your account is separate from your on-device wallet. Nothing syncs yet — this just secures your identity.</div>'+
-        '<button class="btnO tap" data-act="auth-signout" style="margin-top:12px">Sign out</button></div>';
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px">'+
+          '<div style="font-size:13.5px">Signed in as <b>'+esc(a.session.user.email||"")+'</b></div>'+planBadge+
+        '</div>'+
+        err + subBlock +
+        '<div style="font-size:12px;color:'+C.muted+';margin-top:12px;line-height:1.5">Your account is separate from your on-device wallet — nothing syncs yet.</div>'+
+        '<button class="btnO tap" data-act="auth-signout" style="margin-top:10px">Sign out</button></div>';
     }
     if (a.stage === "sent"){
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
@@ -2252,7 +2293,8 @@
       '<div class="dlabel" style="margin-top:12px">Email</div>'+
       '<input class="dinput" data-auth="email" type="email" autocomplete="email" value="'+esc(a.email)+'" placeholder="you@example.com" />'+
       err +
-      '<button class="btnG tap" data-act="auth-sendlink" style="margin-top:14px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button></div>';
+      '<button class="btnG tap" data-act="auth-sendlink" style="margin-top:14px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button>'+
+      '<div style="font-size:11.5px;color:'+C.muted+';margin-top:10px;line-height:1.5;border-top:1px solid rgba(31,28,23,.07);padding-top:10px">Want to subscribe and support the app? Sign in first — checkout needs an account.</div></div>';
   }
 
   function profileView(){
@@ -2645,6 +2687,7 @@
     else if (act==="auth-sendlink"){ authSendLink(); }
     else if (act==="auth-resend"){ authSendLink(); }
     else if (act==="auth-back"){ state.account.stage="email"; state.account.error=""; render(); }
+    else if (act==="auth-subscribe"){ authSubscribe(arg); }
     else if (act==="auth-signout"){ authSignOut(); }
     else if (act==="wallet-toggle"){
       var wi=state.wallet.indexOf(arg);
