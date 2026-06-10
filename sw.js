@@ -1,14 +1,20 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v2";
+var CACHE = "hitchpass-v3";
 
-/* Same-origin shell — must all cache or install fails (these always exist). */
+/* Same-origin shell — must all cache or install fails (these always exist).
+   Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */
 var LOCAL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./favicon.svg?v=2",
+  "./favicon-32.png?v=2",
+  "./apple-touch-icon-180.png?v=2",
+  "./icon.svg?v=2",
+  "./icon-192.png?v=2",
+  "./icon-512.png?v=2",
+  "./icon-maskable-512.png?v=2"
 ];
 
 /* Cross-origin (Google Fonts CSS) — best-effort, never fail install offline. */
