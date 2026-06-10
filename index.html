@@ -53,9 +53,6 @@
   #splash .spin{margin-top:8px;width:26px;height:26px;border:3px solid rgba(255,255,255,.22);border-top-color:#e0875a;border-radius:50%;animation:spin .8s linear infinite;}
   #splash .disc{position:absolute;bottom:28px;left:0;right:0;text-align:center;color:rgba(255,255,255,.42);font-size:11px;font-weight:600;padding:0 24px;}
   @keyframes spin{to{transform:rotate(360deg);}}
-  #gate{position:fixed;inset:0;background:#1f3d2c;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;}
-  #gate input{width:100%;max-width:280px;padding:13px 16px;border-radius:12px;border:none;font-size:16px;text-align:center;outline:none;font-family:inherit;}
-  #gate .btn{width:100%;max-width:280px;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px;}
 </style>
 </head>
 <body>
@@ -1501,7 +1498,6 @@
   function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }
   var saved = load();
   var state = {
-    unlocked: !!saved.unlocked,
     tab: "home",
     wallet: saved.wallet || ["tt","enc"],
     trips: saved.trips || [],
@@ -1524,9 +1520,8 @@
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
   function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
   if (!state.profile.members) state.profile.members = {};
-  function persist(){ save({ unlocked:state.unlocked, wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
+  function persist(){ save({ wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
 
-  var PASSCODE = "hitch";
 
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
@@ -2587,20 +2582,9 @@
     }).join("")+'</div>';
   }
 
-  function gateView(){
-    return '<div id="gate">'+ic("tent",42,"#e0875a")+
-      '<div class="disp" style="color:#faf6ec;font-size:26px;font-weight:800">Hitch Pass</div>'+
-      '<div style="color:#a9bdab;font-size:13px;margin-top:-8px">Enter passcode to continue</div>'+
-      '<input id="pc" type="password" placeholder="Passcode" autocomplete="off" />'+
-      '<div id="pcerr" style="color:#f0a070;font-size:12.5px;display:none">Incorrect passcode</div>'+
-      '<button class="btn tap" data-act="unlock">Enter</button>'+
-      '<div style="position:absolute;bottom:26px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;text-align:center;padding:0 24px">Unofficial · made by a customer, not the company</div></div>';
-  }
-
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
-    if (!state.unlocked){ app.innerHTML = gateView(); var pc=document.getElementById("pc"); if(pc) pc.focus(); return; }
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
@@ -2619,12 +2603,6 @@
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
-  function tryUnlock(){
-    var i = document.getElementById("pc");
-    if (i && i.value.trim().toLowerCase()===PASSCODE){ state.unlocked=true; persist(); render(); }
-    else { var e=document.getElementById("pcerr"); if(e) e.style.display="block"; if(i){ i.value=""; i.focus(); } }
-  }
-
   /* ---- events ---- */
   document.addEventListener("click", function(e){
     var el = e.target.closest ? e.target.closest("[data-act]") : null;
@@ -2639,7 +2617,6 @@
       render();
     }
     else if (act==="share"){ shareApp(); }
-    else if (act==="unlock"){ tryUnlock(); }
     else if (act==="park"){ state.selected=parseInt(arg,10); state.dates={in:"",out:""}; render(); }
     else if (act==="back"){ state.selected=null; render(); }
     else if (act==="netfilter"){ state.netFilter=arg; state.explorePage=1; render(); }
@@ -2728,9 +2705,6 @@
     if (bd){ state.bookingForm[bd==="in"?"dateIn":"dateOut"]=t.value; render(); return; }   // re-render for live over-limit warning
     var bk = t.getAttribute("data-booking");
     if (bk){ state.bookingForm[bk]=t.value; return; }
-  });
-  document.addEventListener("keydown", function(e){
-    if (e.key==="Enter" && !state.unlocked){ tryUnlock(); }
   });
 
   render();
