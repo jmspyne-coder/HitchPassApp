@@ -1,0 +1,88 @@
+<!--
+  Hitch Pass — frontend snippets (copy/paste).
+  Plain HTML + vanilla JS so they work in any framework.
+  React note: replace onclick="fn()" with onClick={fn} and the <script> logic
+  becomes a normal function in your component. Logic is identical.
+-->
+
+<!-- ============================================================= -->
+<!-- 1) PRICING PAGE — subscribe buttons + auto-renewal disclosure -->
+<!-- ============================================================= -->
+<div class="hp-plans">
+  <button onclick="hpSubscribe('annual')">Subscribe — $54/yr ($4.50/mo)</button>
+  <button onclick="hpSubscribe('monthly')">Subscribe — $6.50/mo</button>
+
+  <!-- Auto-renewal disclosure, shown BEFORE the user goes to checkout. -->
+  <p class="hp-renew-note" style="font-size:14px;color:#5c655e;margin-top:10px;">
+    Plans renew automatically until cancelled. Cancel anytime from your account.
+    See our <a href="/terms">Terms</a> and <a href="/refunds">Refund Policy</a>.
+  </p>
+</div>
+
+<script>
+async function hpSubscribe(plan) {
+  // If the user is logged in, pass their email so billing can find them later.
+  const email = window.CURRENT_USER_EMAIL || undefined;
+  try {
+    const r = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, email })
+    });
+    const data = await r.json();
+    if (data.url) window.location.href = data.url;
+    else alert(data.error || 'Something went wrong. Please try again.');
+  } catch (e) {
+    alert('Network error. Please try again.');
+  }
+}
+</script>
+
+
+<!-- ============================================================= -->
+<!-- 2) ACCOUNT PAGE — manage / cancel subscription button         -->
+<!-- ============================================================= -->
+<button onclick="hpManageBilling()">Manage / cancel subscription</button>
+
+<script>
+async function hpManageBilling() {
+  const email = window.CURRENT_USER_EMAIL; // the logged-in user's email
+  try {
+    const r = await fetch('/api/create-portal-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+    if (data.url) window.location.href = data.url;
+    else alert(data.error || 'No active subscription found.');
+  } catch (e) {
+    alert('Network error. Please try again.');
+  }
+}
+</script>
+
+
+<!-- ============================================================= -->
+<!-- 3) SIGNUP — 18+ confirmation + policy agreement (required)    -->
+<!-- ============================================================= -->
+<label style="display:flex;gap:8px;align-items:flex-start;font-size:14px;">
+  <input type="checkbox" id="hp-agree" required>
+  <span>
+    I am 18 or older and I agree to the
+    <a href="/terms" target="_blank">Terms</a> and
+    <a href="/privacy" target="_blank">Privacy Policy</a>.
+  </span>
+</label>
+<!-- Block the signup submit until #hp-agree is checked (it's `required`,
+     so a native <form> enforces it; if you submit via JS, check it first). -->
+
+
+<!-- ============================================================= -->
+<!-- 4) FOOTER — policy links (every page)                         -->
+<!-- ============================================================= -->
+<nav class="hp-footer-links" style="font-size:14px;">
+  <a href="/terms">Terms</a> ·
+  <a href="/privacy">Privacy</a> ·
+  <a href="/refunds">Refunds</a>
+</nav>
