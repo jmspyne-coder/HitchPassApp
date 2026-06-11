@@ -1505,7 +1505,7 @@
     tier: saved.tier || "adventure",
     q: "", netFilter: "", freeOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
-    account: { email:"", stage:"email", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
+    account: { email:"", password:"", authMode:"login", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
     isPaid: false,   // entitlement read from Supabase (display only — NOTHING is gated on this yet)
     authChecked: false,   // true once getSession (local-storage, offline-safe) has resolved on boot
     selected: null, dates: { in:"", out:"" },
@@ -2249,22 +2249,29 @@
     try { return localStorage.getItem(k) === "free"; } catch (e) { return false; }
   }
   function choosePlanFree(){ var k = planKey(); if (k){ try { localStorage.setItem(k, "free"); } catch (e) {} } render(); }
-  var AUTH_REDIRECT = "https://hitch-pass-app.vercel.app";
-  function authSendLink(){
+  /* Email + password auth. Log in or create account (Confirm-email is OFF, so signUp returns a session
+     immediately — no verification email). Errors are surfaced inline; nothing fails silently. */
+  function authPassword(){
     var a = state.account;
     if (!sb){ a.error = "Sign-in is unavailable right now."; render(); return; }
-    if (!a.email.trim()){ a.error = "Enter your email."; render(); return; }
+    var email = a.email.trim(), pw = a.password || "";
+    if (!email || !pw){ a.error = "Enter your email and a password."; render(); return; }
     a.busy = true; a.error = ""; render();
-    sb.auth.signInWithOtp({ email: a.email.trim(), options: { emailRedirectTo: AUTH_REDIRECT } }).then(function(r){
+    var op = (a.authMode === "signup")
+      ? sb.auth.signUp({ email: email, password: pw })
+      : sb.auth.signInWithPassword({ email: email, password: pw });
+    op.then(function(r){
       a.busy = false;
-      if (r && r.error){ a.error = r.error.message || "Couldn’t send the link."; }
-      else { a.stage = "sent"; a.error = ""; }
-      render();
+      if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; render(); return; }
+      a.password = ""; a.error = "";
+      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); }
+      render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
     }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
   }
+  function authToggleMode(){ state.account.authMode = (state.account.authMode === "signup") ? "login" : "signup"; state.account.error = ""; render(); }
   function authSignOut(){
     if (!sb) return;
-    sb.auth.signOut().then(function(){ state.account.session = null; state.account.stage = "email"; state.account.email = ""; state.isPaid = false; state.account.subStatus = null; render(); }).catch(function(){});
+    sb.auth.signOut().then(function(){ state.account.session = null; state.account.email = ""; state.account.password = ""; state.account.authMode = "login"; state.isPaid = false; state.account.subStatus = null; render(); }).catch(function(){});
   }
   function accountCard(){
     var a = state.account;
@@ -2291,21 +2298,9 @@
         '<div style="font-size:12px;color:'+C.muted+';margin-top:12px;line-height:1.5">Your account is separate from your on-device wallet — nothing syncs yet.</div>'+
         '<button class="btnO tap" data-act="auth-signout" style="margin-top:10px">Sign out</button></div>';
     }
-    if (a.stage === "sent"){
-      return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
-        '<div style="font-size:13.5px;font-weight:700;margin-top:7px;display:flex;align-items:center;gap:7px">'+ic("calendar",16,C.green)+'Check your email</div>'+
-        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:6px;line-height:1.5">We sent a sign-in link to <b>'+esc(a.email)+'</b>. Tap it to sign in — it opens right back here. (Check spam if it’s not there in a minute.)</div>'+
-        err +
-        '<button class="tap" data-act="auth-resend" style="margin-top:12px;font-size:12.5px;font-weight:700;color:'+C.green+'">Resend link</button>'+
-        '<button class="tap" data-act="auth-back" style="margin-top:8px;font-size:12.5px;font-weight:700;color:'+C.muted+'">Use a different email</button></div>';
-    }
+    // Signed-out is handled by the front-door login (this branch is unreachable in-app); keep a safe note.
     return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
-      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Sign in with your email to secure your account. We’ll email you a one-tap sign-in link — no password, no code to type.</div>'+
-      '<div class="dlabel" style="margin-top:12px">Email</div>'+
-      '<input class="dinput" data-auth="email" type="email" autocomplete="email" value="'+esc(a.email)+'" placeholder="you@example.com" />'+
-      err +
-      '<button class="btnG tap" data-act="auth-sendlink" style="margin-top:14px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button>'+
-      '<div style="font-size:11.5px;color:'+C.muted+';margin-top:10px;line-height:1.5;border-top:1px solid rgba(31,28,23,.07);padding-top:10px">Want to subscribe and support the app? Sign in first — checkout needs an account.</div></div>';
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">You’re signed out. Use the login screen to sign in.</div></div>';
   }
 
   function profileView(){
@@ -2655,25 +2650,19 @@
   function authLoadingView(){
     return frontDoorShell('<div style="text-align:center;color:#a9bdab;font-size:13px">Loading your wallet…</div>');
   }
-  /* The email login as the ENTRY screen. Reuses the exact magic-link wiring (data-auth/email,
-     auth-sendlink/resend/back, the "sent" confirmation) — only the placement is the front door. */
+  /* The ENTRY screen: email + password. Log in or create an account (Confirm-email off → instant session). */
   function frontDoorView(){
     var a = state.account;
-    var err = a.error ? '<div style="margin-top:10px;color:#f0a070;font-size:12.5px;font-weight:600;text-align:center">'+esc(a.error)+'</div>' : "";
+    var isSignup = (a.authMode === "signup");
+    var err = a.error ? '<div style="margin-top:10px;color:#f0a070;font-size:12.5px;font-weight:600;text-align:center;line-height:1.4">'+esc(a.error)+'</div>' : "";
     var fld = 'width:100%;padding:13px 16px;border-radius:12px;border:none;font-size:16px;outline:none;font-family:inherit';
-    if (a.stage === "sent"){
-      return frontDoorShell(
-        '<div style="color:#faf6ec;font-size:15px;font-weight:700;text-align:center">Check your email</div>'+
-        '<div style="color:#a9bdab;font-size:13px;margin-top:8px;line-height:1.5;text-align:center">We sent a sign-in link to <b style="color:#faf6ec">'+esc(a.email)+'</b>. Tap it to sign in — it opens right back here. (Check spam if needed.)</div>'+
-        err +
-        '<button class="tap" data-act="auth-resend" style="margin-top:16px;width:100%;color:#e0875a;font-weight:700;font-size:13.5px;background:none">Resend link</button>'+
-        '<button class="tap" data-act="auth-back" style="margin-top:6px;width:100%;color:rgba(255,255,255,.55);font-weight:700;font-size:13px;background:none">Use a different email</button>');
-    }
     return frontDoorShell(
-      '<div style="color:#a9bdab;font-size:13.5px;line-height:1.5;text-align:center;margin-bottom:14px">Sign in with your email — we’ll email you a one-tap link. No password, no code.</div>'+
+      '<div style="color:#a9bdab;font-size:13.5px;line-height:1.5;text-align:center;margin-bottom:14px">'+(isSignup ? "Create your account — email and a password." : "Log in with your email and password.")+'</div>'+
       '<input id="fde" data-auth="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="'+esc(a.email)+'" style="'+fld+'" />'+
+      '<input data-auth="password" type="password" autocomplete="'+(isSignup?"new-password":"current-password")+'" placeholder="Password" value="'+esc(a.password||"")+'" style="'+fld+';margin-top:10px" />'+
       err +
-      '<button class="tap" data-act="auth-sendlink" style="margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Sending…":"Email me a sign-in link")+'</button>');
+      '<button class="tap" data-act="auth-submit" style="margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px"'+(a.busy?" disabled":"")+'>'+(a.busy ? (isSignup?"Creating account…":"Logging in…") : (isSignup?"Create account":"Log in"))+'</button>'+
+      '<button class="tap" data-act="auth-toggle-mode" style="margin-top:12px;width:100%;color:#e0875a;font-weight:700;font-size:13px;background:none">'+(isSignup ? "Have an account? Log in" : "New here? Create an account")+'</button>');
   }
 
   /* One-time onboarding plan choice — shown to a signed-in user who hasn't chosen yet.
@@ -2771,9 +2760,8 @@
       persist();
       state.tab="trips"; state.selected=null; render();
     }
-    else if (act==="auth-sendlink"){ authSendLink(); }
-    else if (act==="auth-resend"){ authSendLink(); }
-    else if (act==="auth-back"){ state.account.stage="email"; state.account.error=""; render(); }
+    else if (act==="auth-submit"){ authPassword(); }
+    else if (act==="auth-toggle-mode"){ authToggleMode(); }
     else if (act==="auth-subscribe"){ authSubscribe(arg); }
     else if (act==="plan-free"){ choosePlanFree(); }
     else if (act==="auth-signout"){ authSignOut(); }
