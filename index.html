@@ -2284,17 +2284,23 @@
     function beginPoll(){ if (!pollStarted){ pollStarted = true; tick(); } }
     // Reconcile Stripe -> Supabase synchronously first so we don't race the async webhook. The endpoint
     // writes the row before responding; we then read it (entitlement still comes ONLY from the row).
-    // If reconcile errors or hangs, fall back to polling the webhook-written row.
-    var tok = state.account.session && state.account.session.access_token;
-    if (tok){
-      fetch("/api/confirm-checkout", { method:"POST", headers:{ "Authorization":"Bearer "+tok } })
-        .then(function(){ return refreshSubscription(); })
-        .then(function(){ if (state.isPaid) succeed(); else beginPoll(); })
-        .catch(function(){ beginPoll(); });
-      setTimeout(beginPoll, 6000);   // safety net if reconcile never resolves
-    } else {
-      setTimeout(tick, 3000);
-    }
+    // IMPORTANT: resolve the session HERE via getSession(). This runs at page-load, BEFORE initAuth's
+    // getSession() has populated state.account.session — so reading the token off state would be empty and
+    // we'd silently skip the reconcile and just poll (the bug that caused the post-checkout pending screen).
+    sb.auth.getSession().then(function(r){
+      var session = r && r.data && r.data.session;
+      if (session) state.account.session = session;   // ensure refreshSubscription can read the row
+      var tok = session && session.access_token;
+      if (tok){
+        fetch("/api/confirm-checkout", { method:"POST", headers:{ "Authorization":"Bearer "+tok } })
+          .then(function(){ return refreshSubscription(); })
+          .then(function(){ if (state.isPaid) succeed(); else beginPoll(); })
+          .catch(function(){ beginPoll(); });
+        setTimeout(beginPoll, 6000);   // safety net if reconcile never resolves
+      } else {
+        beginPoll();   // no session token yet — poll the row; initAuth restores the session shortly
+      }
+    }).catch(function(){ beginPoll(); });
   }
   function authSubscribe(plan){
     var a = state.account;
