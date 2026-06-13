@@ -2264,23 +2264,35 @@
   function startCheckoutConfirm(){
     if (!sb) return;
     state.confirmCheckout = true; state.confirmTimedOut = false;
-    var attempts = 0, MAX = 8;   // ~8 × 3s ≈ 24s
+    var attempts = 0, MAX = 8;   // ~8 × 3s ≈ 24s — fallback if the synchronous reconcile below fails
     render();
     function stripParam(){ try { history.replaceState({}, "", location.pathname); } catch(e){} }
+    function succeed(){ state.confirmCheckout = false; stripParam(); render(); }
     function tick(){
       attempts++;
       // Chain on the CONFIRMED result — refreshSubscription is the only thing that can set isPaid true.
       refreshSubscription().then(function(){
-        if (state.isPaid){                      // confirmed active/trialing row → Pro/success
-          state.confirmCheckout = false; stripParam(); render();
-        } else if (attempts >= MAX){            // window elapsed, still no active row → pending (isPaid stays false)
+        if (state.isPaid){ succeed(); }                          // confirmed active/trialing row → Pro/success
+        else if (attempts >= MAX){                               // window elapsed, still no active row → pending
           state.confirmCheckout = false; state.confirmTimedOut = true; stripParam(); render();
-        } else {
-          setTimeout(tick, 3000);
-        }
+        } else { setTimeout(tick, 3000); }
       });
     }
-    setTimeout(tick, 3000);
+    var pollStarted = false;
+    function beginPoll(){ if (!pollStarted){ pollStarted = true; tick(); } }
+    // Reconcile Stripe -> Supabase synchronously first so we don't race the async webhook. The endpoint
+    // writes the row before responding; we then read it (entitlement still comes ONLY from the row).
+    // If reconcile errors or hangs, fall back to polling the webhook-written row.
+    var tok = state.account.session && state.account.session.access_token;
+    if (tok){
+      fetch("/api/confirm-checkout", { method:"POST", headers:{ "Authorization":"Bearer "+tok } })
+        .then(function(){ return refreshSubscription(); })
+        .then(function(){ if (state.isPaid) succeed(); else beginPoll(); })
+        .catch(function(){ beginPoll(); });
+      setTimeout(beginPoll, 6000);   // safety net if reconcile never resolves
+    } else {
+      setTimeout(tick, 3000);
+    }
   }
   function authSubscribe(plan){
     var a = state.account;
