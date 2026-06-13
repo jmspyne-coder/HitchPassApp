@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v5";
+var CACHE = "hitchpass-v7";
 
 /* Same-origin shell — must all cache or install fails (these always exist).
    Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */

@@ -2235,8 +2235,10 @@
   /* Reads the user's subscription row (RLS = own row only) and derives isPro. Drives the badge AND the gates. */
   function refreshSubscription(){
     if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return Promise.resolve(); }
+    var uid = state.account.session.user && state.account.session.user.id;
+    // Filter by user_id explicitly (don't rely on RLS alone) so maybeSingle never sees >1 row and throws.
     // Returns its promise so the checkout poll can act on the CONFIRMED result, not a stale read.
-    return sb.from("subscriptions").select("status,current_period_end").maybeSingle().then(function(r){
+    return sb.from("subscriptions").select("status,current_period_end").eq("user_id", uid).maybeSingle().then(function(r){
       var row = r && r.data;
       // not expired = no period end yet (null) OR a future one — matches the spec deriveIsPro invariant.
       var notExpired = row && (!row.current_period_end || (new Date(row.current_period_end).getTime() > Date.now()));
