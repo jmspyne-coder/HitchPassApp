@@ -2245,7 +2245,11 @@
       var uid = session && session.user && session.user.id;
       if (session) state.account.session = session;
       if (!tok || !uid){ state.isPaid = false; state.account.subStatus = null; return; }
-      return fetch(SUPABASE_URL + "/rest/v1/subscriptions?select=status,current_period_end&user_id=eq." + uid, {
+      // cache:no-store + cache-buster: the FIRST read (before the webhook/reconcile writes the row) returns
+      // [], and the browser was replaying that stale [] for every later same-URL GET — so entitlement never
+      // flipped. Force every read to hit the network.
+      return fetch(SUPABASE_URL + "/rest/v1/subscriptions?select=status,current_period_end&user_id=eq." + uid + "&_=" + Date.now(), {
+        cache: "no-store",
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + tok }
       }).then(function(resp){ return resp.ok ? resp.json() : []; }).then(function(rows){
         var row = rows && rows[0];
