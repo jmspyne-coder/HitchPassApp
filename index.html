@@ -2308,10 +2308,16 @@
       var tok = session && session.access_token;
       if (tok){
         fetch("/api/confirm-checkout", { method:"POST", headers:{ "Authorization":"Bearer "+tok } })
-          .then(function(){ return refreshSubscription(); })
-          .then(function(){ if (state.isPaid) succeed(); else beginPoll(); })
+          .then(function(resp){ return resp.json(); })
+          .then(function(d){
+            // confirm-checkout is server-side truth: it reads the Stripe subscription AND writes the row.
+            // Trust its active flag for the immediate flip — this avoids the read-after-write lag where the
+            // client's RLS read returns [] for several seconds right after the row is written.
+            if (d && d.active){ state.isPaid = true; state.upsell = null; succeed(); }
+            else { return refreshSubscription().then(function(){ if (state.isPaid) succeed(); else beginPoll(); }); }
+          })
           .catch(function(){ beginPoll(); });
-        setTimeout(beginPoll, 6000);   // safety net if reconcile never resolves
+        setTimeout(beginPoll, 8000);   // safety net if reconcile never resolves
       } else {
         beginPoll();   // no session token yet — poll the row; initAuth restores the session shortly
       }
