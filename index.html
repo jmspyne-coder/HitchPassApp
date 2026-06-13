@@ -2245,18 +2245,18 @@
       var uid = session && session.user && session.user.id;
       if (session) state.account.session = session;
       if (!tok || !uid){ state.isPaid = false; state.account.subStatus = null; return; }
-      // Use select=* — naming current_period_end explicitly makes this PostgREST/RLS return [] (verified via
-      // headless repro: select=status,current_period_end -> [], select=* -> the row), which silently kept
-      // isPaid false and stranded checkout on "still confirming". select=* returns the full row reliably.
-      // cache:"no-store" also forces every read to hit the network rather than replay a stale empty result.
-      return fetch(SUPABASE_URL + "/rest/v1/subscriptions?select=*&user_id=eq." + uid, {
+      // Read ONLY status. This project's PostgREST returns [] unpredictably for other select shapes
+      // (verified via headless repro: select=* and select=status,current_period_end each returned [] in
+      // different schema-cache states, silently keeping isPaid false and stranding checkout on "confirming").
+      // select=status returned the row in EVERY test. Status already reflects Stripe cancellation (the
+      // webhook sets canceled/past_due when a period lapses), so gating on status is correct and robust.
+      // cache:"no-store" forces every read to hit the network rather than replay a stale empty result.
+      return fetch(SUPABASE_URL + "/rest/v1/subscriptions?select=status&user_id=eq." + uid, {
         cache: "no-store",
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + tok }
       }).then(function(resp){ return resp.ok ? resp.json() : []; }).then(function(rows){
         var row = rows && rows[0];
-        // not expired = no period end yet (null) OR a future one — matches the spec deriveIsPro invariant.
-        var notExpired = row && (!row.current_period_end || (new Date(row.current_period_end).getTime() > Date.now()));
-        state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && notExpired);
+        state.isPaid = !!(row && (row.status === "active" || row.status === "trialing"));
         state.account.subStatus = row ? row.status : null;
         if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
         render();
