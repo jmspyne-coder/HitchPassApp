@@ -2224,7 +2224,7 @@
     if (!sb) return;
     // getSession reads the cached session from local storage (NO network) → offline-safe entry.
     sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); render(); }).catch(function(){ state.authChecked = true; render(); });
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; if (session){ refreshSubscription(); subscribeRealtime(); } else { state.isPaid=false; state.account.subStatus=null; state.upsell=null; unsubscribeRealtime(); } render(); });
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
     // Returning from Stripe Checkout: the webhook writes the row a few seconds AFTER redirect, so show a
     // "Confirming…" screen and poll until the row lands — instead of dropping the user back on the plan page
     // (which reads like the payment failed even though it succeeded).
@@ -2234,11 +2234,13 @@
   }
   /* Reads the user's subscription row (RLS = own row only) and derives isPro. Drives the badge AND the gates. */
   function refreshSubscription(){
-    if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return; }
-    sb.from("subscriptions").select("status,current_period_end").maybeSingle().then(function(r){
+    if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return Promise.resolve(); }
+    // Returns its promise so the checkout poll can act on the CONFIRMED result, not a stale read.
+    return sb.from("subscriptions").select("status,current_period_end").maybeSingle().then(function(r){
       var row = r && r.data;
-      var future = row && row.current_period_end && (new Date(row.current_period_end).getTime() > Date.now());
-      state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && future);
+      // not expired = no period end yet (null) OR a future one — matches the spec deriveIsPro invariant.
+      var notExpired = row && (!row.current_period_end || (new Date(row.current_period_end).getTime() > Date.now()));
+      state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && notExpired);
       state.account.subStatus = row ? row.status : null;
       if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
       render();
@@ -2262,20 +2264,23 @@
   function startCheckoutConfirm(){
     if (!sb) return;
     state.confirmCheckout = true; state.confirmTimedOut = false;
-    var attempts = 0, MAX = 12;   // ~12 × 2s = 24s
+    var attempts = 0, MAX = 8;   // ~8 × 3s ≈ 24s
     render();
-    var poll = setInterval(function(){
+    function stripParam(){ try { history.replaceState({}, "", location.pathname); } catch(e){} }
+    function tick(){
       attempts++;
-      refreshSubscription();   // async: sets isPaid + re-renders when it resolves
-      if (state.isPaid || attempts >= MAX){
-        clearInterval(poll);
-        state.confirmCheckout = false;
-        state.confirmTimedOut = !state.isPaid;
-        // strip ?checkout=success so a later manual refresh doesn't re-enter this flow
-        try { history.replaceState({}, "", location.pathname); } catch(e){}
-        render();
-      }
-    }, 2000);
+      // Chain on the CONFIRMED result — refreshSubscription is the only thing that can set isPaid true.
+      refreshSubscription().then(function(){
+        if (state.isPaid){                      // confirmed active/trialing row → Pro/success
+          state.confirmCheckout = false; stripParam(); render();
+        } else if (attempts >= MAX){            // window elapsed, still no active row → pending (isPaid stays false)
+          state.confirmCheckout = false; state.confirmTimedOut = true; stripParam(); render();
+        } else {
+          setTimeout(tick, 3000);
+        }
+      });
+    }
+    setTimeout(tick, 3000);
   }
   function authSubscribe(plan){
     var a = state.account;
@@ -2321,6 +2326,7 @@
   function authSignOut(){
     if (!sb) return;
     unsubscribeRealtime();
+    state.isPaid = false; state.account.subStatus = null; state.upsell = null;   // drop Pro immediately so it can't linger into the next session
     sb.auth.signOut().then(function(){ state.account.session = null; state.account.email = ""; state.account.password = ""; state.account.authMode = "login"; state.isPaid = false; state.account.subStatus = null; state.upsell = null; render(); }).catch(function(){});
   }
   function accountCard(){
@@ -2759,7 +2765,7 @@
       '<div style="font-size:11px;color:#867d6c;margin-top:7px">$4.50/mo billed annually ($54/yr), or $6.50/mo</div>'+
       proInner + '</div>';
     var timeoutNote = state.confirmTimedOut
-      ? '<div style="background:rgba(224,135,90,.15);border:1px solid rgba(224,135,90,.5);border-radius:11px;padding:11px 13px;margin-bottom:14px;color:#f3cdb0;font-size:12.5px;line-height:1.5;text-align:center">If you just completed a payment, your Pro access is still finalizing — refresh in a moment and it’ll appear. You won’t be charged twice.</div>'
+      ? '<div style="background:rgba(224,135,90,.15);border:1px solid rgba(224,135,90,.5);border-radius:11px;padding:11px 13px;margin-bottom:14px;color:#f3cdb0;font-size:12.5px;line-height:1.5;text-align:center">Payment received — still confirming your subscription. Refresh in a moment.</div>'
       : "";
     return frontDoorShell(
       timeoutNote +
