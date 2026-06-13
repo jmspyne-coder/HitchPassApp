@@ -35,15 +35,23 @@ module.exports = async (req, res) => {
     // Find this user's Stripe customer by email (create-checkout reuses/sets the same email).
     var custList = await stripe.customers.list({ email: user.email, limit: 1 });
     var customer = (custList && custList.data && custList.data[0]) || null;
-    if (!customer) { res.status(200).json({ active: false, reason: "no_customer" }); return; }
+    if (!customer) { console.log("confirm-checkout: no Stripe customer for", user.email); res.status(200).json({ active: false, reason: "no_customer" }); return; }
 
     // Latest subscription for that customer; prefer an active/trialing one.
     var subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 10 });
     var list = (subs && subs.data) || [];
+    // Diagnostic: surface every subscription's status+interval so a monthly-vs-annual difference is visible in logs.
+    try {
+      console.log("confirm-checkout: " + user.email + " has " + list.length + " sub(s): " +
+        list.map(function(s){
+          var it = s.items && s.items.data && s.items.data[0] && s.items.data[0].price && s.items.data[0].price.recurring && s.items.data[0].price.recurring.interval;
+          return s.status + "/" + (it || "?");
+        }).join(", "));
+    } catch (e) {}
     var sub = null;
     for (var i = 0; i < list.length; i++) { if (list[i].status === "active" || list[i].status === "trialing") { sub = list[i]; break; } }
     if (!sub) sub = list[0] || null;
-    if (!sub) { res.status(200).json({ active: false, reason: "no_subscription" }); return; }
+    if (!sub) { console.log("confirm-checkout: customer", customer.id, "has no subscription"); res.status(200).json({ active: false, reason: "no_subscription" }); return; }
 
     // Stripe's 2025-03 "Basil" API moved current_period_end onto the subscription item; fall back to it.
     function periodEnd(s) {
@@ -63,6 +71,7 @@ module.exports = async (req, res) => {
     }, { onConflict: "user_id" });
 
     var active = (sub.status === "active" || sub.status === "trialing");
+    console.log("confirm-checkout: wrote " + user.email + " status=" + sub.status + " period_end=" + periodEnd(sub) + " -> active=" + active);
     res.status(200).json({ active: active, status: sub.status });
   } catch (err) {
     console.error("confirm-checkout error:", (err && err.message) || err, (err && err.type) || "");
