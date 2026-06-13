@@ -43,7 +43,11 @@ module.exports = async (req, res) => {
     await admin.from("subscriptions").upsert(row, { onConflict: "user_id" });
   }
   function periodEnd(sub) {
-    return sub && sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+    // Stripe's 2025-03 "Basil" API moved current_period_end off the subscription object
+    // onto each subscription item, so fall back to the first item when the top-level is absent.
+    var cpe = sub && sub.current_period_end;
+    if (!cpe && sub && sub.items && sub.items.data && sub.items.data[0]) cpe = sub.items.data[0].current_period_end;
+    return cpe ? new Date(cpe * 1000).toISOString() : null;
   }
   async function userIdForCustomer(customerId) {
     var r = await admin.from("subscriptions").select("user_id").eq("stripe_customer_id", customerId).maybeSingle();
@@ -66,7 +70,7 @@ module.exports = async (req, res) => {
           current_period_end: periodEnd(sub)
         });
       }
-    } else if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+    } else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       var s = event.data.object;
       var uid = await userIdForCustomer(s.customer);
       if (uid) {

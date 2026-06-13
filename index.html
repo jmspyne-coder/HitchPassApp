@@ -1506,8 +1506,11 @@
     q: "", netFilter: "", freeOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
     account: { email:"", password:"", authMode:"login", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
-    isPaid: false,   // entitlement read from Supabase (display only — NOTHING is gated on this yet)
+    isPaid: false,   // entitlement (isPro) read from Supabase; gates the Pro surfaces (Fix 4)
+    upsell: null,    // feature key while the shared Go-Pro overlay is open over the app
     authChecked: false,   // true once getSession (local-storage, offline-safe) has resolved on boot
+    confirmCheckout: false,   // true while polling Supabase for the subscription row after a Stripe checkout return
+    confirmTimedOut: false,   // true if that poll window elapsed without the row landing (rare webhook lag)
     selected: null, dates: { in:"", out:"" },
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
@@ -1947,15 +1950,18 @@
     var stayWarn = overStay
       ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+eb.maxDaysIn+'-night max stay.</div>'
       : "";
+    if (!isPro()){ bw = ""; stayWarn = ""; }   // Pro-only: booking-window + max-stay alerts (Fix 4 surface 2). Free sees dates only.
     // Hard guard (live): departure must be after arrival. Blocks Add (handled in the addtrip action).
     var dateErr = (state.dates.in && state.dates.out && nights<1)
       ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:700">'+ic("alert",14,C.clay)+'Departure must be after arrival.</div>'
       : "";
 
     var num = (state.profile.members && state.profile.members[p.network]) || "";
-    var memBlock = num
-      ? '<div style="margin-top:14px;font-size:13px"><span style="color:'+C.muted+'">Your '+esc(net.short)+' #: </span><b>'+esc(num)+'</b> <button class="tap" data-act="copynum" style="color:'+C.green+';font-weight:700;font-size:12.5px;margin-left:6px">Copy</button></div>'
-      : '<div style="margin-top:14px;font-size:12px;color:'+C.muted+'">Add your '+esc(net.short)+' number in Profile for one-tap copy at booking.</div>';
+    var memBlock = !isPro()
+      ? lockedInline("Member numbers + one-tap copy are a Pro feature.")   // Fix 4 surface 3
+      : (num
+        ? '<div style="margin-top:14px;font-size:13px"><span style="color:'+C.muted+'">Your '+esc(net.short)+' #: </span><b>'+esc(num)+'</b> <button class="tap" data-act="copynum" style="color:'+C.green+';font-weight:700;font-size:12.5px;margin-left:6px">Copy</button></div>'
+        : '<div style="margin-top:14px;font-size:12px;color:'+C.muted+'">Add your '+esc(net.short)+' number in Profile for one-tap copy at booking.</div>');
 
     return head +
       '<div style="margin-top:14px;font-size:12.5px;color:'+C.muted+';font-weight:600">'+rules+'</div>'+
@@ -2032,6 +2038,7 @@
       '<button class="tap" data-act="trip-remove" data-arg="'+t.id+'" style="'+(p?'padding:11px 14px':'flex:1;padding:11px;text-align:center')+';border-radius:11px;border:1px solid rgba(168,71,47,.3);color:'+C.clay+';font-weight:700;font-size:13px">Remove</button>'+
       '</div>';
 
+    if (!isPro()){ bw = ""; stayWarn = ""; }   // Pro-only: booking-window + over-stay flags (Fix 4 surface 2)
     return '<div class="tcard"'+(past?' style="opacity:.6"':'')+'>'+
       '<div style="display:flex;align-items:flex-start;gap:8px">'+
         '<div style="flex:1">'+
@@ -2122,6 +2129,7 @@
       '<div style="margin-top:12px"><div class="dlabel">Confirmation # (optional)</div><input class="dinput" data-booking="confirmation" type="text" value="'+esc(f.confirmation)+'" placeholder="e.g. TT-48217" autocomplete="off" /></div>'+
       '<div style="margin-top:12px"><div class="dlabel">Notes (optional)</div><textarea class="dinput" data-booking="note" rows="3" placeholder="Site #, gate code, check-in time…" style="resize:vertical">'+esc(f.note)+'</textarea></div>'+
       (function(){
+        if (!isPro()) return '';   // Pro-only max-stay alert (Fix 4 surface 2)
         var bNet = f.custom ? f.network : (f.parkId ? (parkById(f.parkId)||{}).network : "");
         var bOver = (bNet && f.dateIn && f.dateOut) ? overStayInfo(bNet, f.dateIn, f.dateOut) : null;
         return bOver ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+bOver.nights+' nights exceeds '+esc(NETWORKS[bNet].short)+'’s '+bOver.limit+'-night max stay.</div>' : '';
@@ -2134,6 +2142,7 @@
 
   function saveBooking(){
     var f = state.bookingForm;
+    if (!isPro() && state.trips.length >= 2){ openUpgrade("trips"); return; }   // Pro: unlimited trips; Free cap = 2
     var hasPark = f.custom ? (!!f.parkName.trim() && !!f.network) : (f.parkId!=null);
     if (!hasPark){ f.error = f.custom ? "Enter a park name and pick a network." : "Search and pick a park, or use “Not in the list?”"; render(); return; }
     if (!f.dateIn || !f.dateOut){ f.error = "Pick your arrival and departure dates."; render(); return; }
@@ -2182,6 +2191,7 @@
   /* Membership numbers — one field per registry network (dc is display-only, excluded). Persisted on
      state.profile.members via the existing data-member input path; surfaced for one-tap copy at booking. */
   function memberNumbersCard(){
+    if (!isPro()) return lockedCard("Membership numbers", "Store each network’s member number once, then one-tap copy it on a park’s booking screen.");   // Fix 4 surface 3
     var members = state.profile.members || {};
     var rows = Object.keys(NETWORKS).filter(function(key){ return !NETWORKS[key].displayOnly; }).map(function(key){
       var n = NETWORKS[key];
@@ -2206,18 +2216,23 @@
   }
 
   /* ---- Auth flow (email OTP code). All async; re-render on completion. Never throws if sb is null. ---- */
+  var subChannel = null;   // Supabase realtime channel on this user's subscriptions row
+  /* THE invariant (spec Fix 3): isPro is the single source of truth for entitlement. It is derived
+     only from the subscriptions row (active/trialing + not expired) — never from hp_plan_choice. */
+  function isPro(){ return !!state.isPaid; }
   function initAuth(){
     if (!sb) return;
     // getSession reads the cached session from local storage (NO network) → offline-safe entry.
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); render(); }).catch(function(){ state.authChecked = true; render(); });
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; if (session) refreshSubscription(); else { state.isPaid=false; state.account.subStatus=null; } render(); });
-    // Returning from Stripe Checkout: the webhook may lag a moment, so re-read once after a short delay too.
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); render(); }).catch(function(){ state.authChecked = true; render(); });
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; if (session){ refreshSubscription(); subscribeRealtime(); } else { state.isPaid=false; state.account.subStatus=null; state.upsell=null; unsubscribeRealtime(); } render(); });
+    // Returning from Stripe Checkout: the webhook writes the row a few seconds AFTER redirect, so show a
+    // "Confirming…" screen and poll until the row lands — instead of dropping the user back on the plan page
+    // (which reads like the payment failed even though it succeeded).
     if (typeof location !== "undefined" && /[?&]checkout=success/.test(location.search || "")){
-      refreshSubscription();
-      setTimeout(refreshSubscription, 3500);
+      startCheckoutConfirm();
     }
   }
-  /* Reads the user's subscription row (RLS = own row only) and computes isPaid. Display only — no gating. */
+  /* Reads the user's subscription row (RLS = own row only) and derives isPro. Drives the badge AND the gates. */
   function refreshSubscription(){
     if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return; }
     sb.from("subscriptions").select("status,current_period_end").maybeSingle().then(function(r){
@@ -2225,8 +2240,42 @@
       var future = row && row.current_period_end && (new Date(row.current_period_end).getTime() > Date.now());
       state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && future);
       state.account.subStatus = row ? row.status : null;
+      if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
       render();
     }).catch(function(){});
+  }
+  /* Realtime: flip the UI the instant the webhook writes the row — no reload, ahead of the poll (spec Fix 3). */
+  function subscribeRealtime(){
+    if (!sb || subChannel) return;
+    var u = state.account.session && state.account.session.user;
+    if (!u) return;
+    try {
+      subChannel = sb.channel("sub-"+u.id)
+        .on("postgres_changes", { event:"*", schema:"public", table:"subscriptions", filter:"user_id=eq."+u.id }, function(){ refreshSubscription(); })
+        .subscribe();
+    } catch(e){ subChannel = null; }
+  }
+  function unsubscribeRealtime(){ if (sb && subChannel){ try { sb.removeChannel(subChannel); } catch(e){} subChannel = null; } }
+  /* After returning from Stripe Checkout, the webhook writes the subscription row a few seconds later.
+     Poll for it and keep a "Confirming…" screen up until isPaid flips true or the window elapses, so a
+     paying user never lands back on the plan page thinking it failed. */
+  function startCheckoutConfirm(){
+    if (!sb) return;
+    state.confirmCheckout = true; state.confirmTimedOut = false;
+    var attempts = 0, MAX = 12;   // ~12 × 2s = 24s
+    render();
+    var poll = setInterval(function(){
+      attempts++;
+      refreshSubscription();   // async: sets isPaid + re-renders when it resolves
+      if (state.isPaid || attempts >= MAX){
+        clearInterval(poll);
+        state.confirmCheckout = false;
+        state.confirmTimedOut = !state.isPaid;
+        // strip ?checkout=success so a later manual refresh doesn't re-enter this flow
+        try { history.replaceState({}, "", location.pathname); } catch(e){}
+        render();
+      }
+    }, 2000);
   }
   function authSubscribe(plan){
     var a = state.account;
@@ -2271,7 +2320,8 @@
   function authToggleMode(){ state.account.authMode = (state.account.authMode === "signup") ? "login" : "signup"; state.account.error = ""; render(); }
   function authSignOut(){
     if (!sb) return;
-    sb.auth.signOut().then(function(){ state.account.session = null; state.account.email = ""; state.account.password = ""; state.account.authMode = "login"; state.isPaid = false; state.account.subStatus = null; render(); }).catch(function(){});
+    unsubscribeRealtime();
+    sb.auth.signOut().then(function(){ state.account.session = null; state.account.email = ""; state.account.password = ""; state.account.authMode = "login"; state.isPaid = false; state.account.subStatus = null; state.upsell = null; render(); }).catch(function(){});
   }
   function accountCard(){
     var a = state.account;
@@ -2286,8 +2336,8 @@
       var planBadge = '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>';
       var payNote = a.payUnavailable ? '<div style="font-size:11.5px;color:'+C.clay+';font-weight:600;margin-top:8px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>' : "";
       var subBlock = state.isPaid
-        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — every feature stays open to everyone for now.</div>'
-        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to support the app and unlock everything (nothing is locked yet — this backs development).</div>'+
+        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — all Pro features are unlocked.</div>'
+        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to unlock unlimited trips, booking-window &amp; max-stay alerts, member-number copy, the Payback calculator, Coverage-near-a-prospect, and Perks.</div>'+
           '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
           '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote;
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
@@ -2459,6 +2509,11 @@
   }
 
   function perksView(){
+    if (!isPro()){   // Fix 4 surface 6 — tier intelligence is Pro
+      var lh = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Perks</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+'">Tier intelligence</div></div>';
+      return lh + lockedCard("Perks & tier intelligence", "See exactly what each membership tier includes, what improves at the next tier, and the full benefits matrix.");
+    }
     var tierKey = state.tier;
     var def = perksTierDef(tierKey);
     var header = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">What I get</div>';
@@ -2539,23 +2594,29 @@
       return '<div style="margin-top:12px"><div class="dlabel">'+label+'</div>'+
         '<input class="dinput" data-tools="'+key+'" type="number" inputmode="numeric" value="'+esc(String(val))+'" /></div>';
     }
+    // Both tools are Pro (Fix 4 surfaces 5 + 4). Free users see a teaser + CTA in place of each card.
+    var coverageCard = !isPro()
+      ? lockedCard("Coverage near a prospect", "Set a prospect’s city and radius to scope nearby park coverage for your pitch.")
+      : '<div class="det">'+
+          '<div class="dlabel" style="font-size:12px">Coverage near a prospect</div>'+
+          '<input class="dinput" data-tools="city" type="text" value="'+esc(tl.city)+'" placeholder="City, ST" style="margin-top:10px" autocapitalize="words" />'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+'</div>'+
+          '<div style="font-size:12px;color:'+C.muted+';margin-top:11px;line-height:1.5">'+coverageNote+'</div>'+
+        '</div>';
+    var paybackCard = !isPro()
+      ? lockedCard("Payback calculator", "Plug in nights/year, nightly rate, and dues to see whether a membership pays for itself.")
+      : '<div class="det">'+
+          '<div class="dlabel" style="font-size:12px">Does it pay for itself?</div>'+
+          numField("Nights / year","nights",tl.nights)+
+          numField("$ / night otherwise","perNight",tl.perNight)+
+          numField("Annual dues ($)","dues",tl.dues)+
+          '<div id="savingsBox" style="margin-top:16px">'+savingsHTML()+'</div>'+
+          '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;margin-top:11px;line-height:1.5">Rough estimate — excludes the $20/night and paid-network parks.</div>'+
+        '</div>';
     return ''+
       '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Coverage &amp; savings</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+'">A quick pitch tool</div></div>'+
-      '<div class="det">'+
-        '<div class="dlabel" style="font-size:12px">Coverage near a prospect</div>'+
-        '<input class="dinput" data-tools="city" type="text" value="'+esc(tl.city)+'" placeholder="City, ST" style="margin-top:10px" autocapitalize="words" />'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+'</div>'+
-        '<div style="font-size:12px;color:'+C.muted+';margin-top:11px;line-height:1.5">'+coverageNote+'</div>'+
-      '</div>'+
-      '<div class="det">'+
-        '<div class="dlabel" style="font-size:12px">Does it pay for itself?</div>'+
-        numField("Nights / year","nights",tl.nights)+
-        numField("$ / night otherwise","perNight",tl.perNight)+
-        numField("Annual dues ($)","dues",tl.dues)+
-        '<div id="savingsBox" style="margin-top:16px">'+savingsHTML()+'</div>'+
-        '<div style="font-size:11.5px;color:'+C.muted+';text-align:center;margin-top:11px;line-height:1.5">Rough estimate — excludes the $20/night and paid-network parks.</div>'+
-      '</div>'+
+      coverageCard + paybackCard +
       '<div style="padding:0 16px 16px"><button class="btnG tap" data-act="nav" data-arg="home">Back to home</button></div>';
   }
 
@@ -2650,6 +2711,16 @@
   function authLoadingView(){
     return frontDoorShell('<div style="text-align:center;color:#a9bdab;font-size:13px">Loading your wallet…</div>');
   }
+  /* Shown after a Stripe Checkout return while the webhook finishes writing the subscription row. */
+  function confirmingView(){
+    return frontDoorShell(
+      '<style>@keyframes hpspin{to{transform:rotate(360deg)}}</style>'+
+      '<div style="text-align:center">'+
+        '<div style="width:34px;height:34px;margin:0 auto 16px;border:3px solid rgba(255,255,255,.22);border-top-color:#e0875a;border-radius:50%;animation:hpspin .8s linear infinite"></div>'+
+        '<div style="color:#faf6ec;font-size:16px;font-weight:800">Confirming your subscription…</div>'+
+        '<div style="color:#a9bdab;font-size:12.5px;line-height:1.5;margin-top:8px">Your payment went through. We’re activating Pro — this usually takes just a few seconds.</div>'+
+      '</div>');
+  }
   /* The ENTRY screen: email + password. Log in or create an account (Confirm-email off → instant session). */
   function frontDoorView(){
     var a = state.account;
@@ -2687,10 +2758,51 @@
       '<div style="font-size:12px;color:#5b5446;margin-top:5px;line-height:1.5">Everything in Free, plus unlimited trips, max-stay + booking-window alerts, member numbers + one-tap copy, the Payback calculator, Coverage-near-a-prospect, and Perks/tier intelligence.</div>'+
       '<div style="font-size:11px;color:#867d6c;margin-top:7px">$4.50/mo billed annually ($54/yr), or $6.50/mo</div>'+
       proInner + '</div>';
+    var timeoutNote = state.confirmTimedOut
+      ? '<div style="background:rgba(224,135,90,.15);border:1px solid rgba(224,135,90,.5);border-radius:11px;padding:11px 13px;margin-bottom:14px;color:#f3cdb0;font-size:12.5px;line-height:1.5;text-align:center">If you just completed a payment, your Pro access is still finalizing — refresh in a moment and it’ll appear. You won’t be charged twice.</div>'
+      : "";
     return frontDoorShell(
+      timeoutNote +
       '<div style="color:#faf6ec;font-size:21px;font-weight:800;text-align:center">Choose your plan</div>'+
       '<div style="color:#a9bdab;font-size:12px;text-align:center;margin:5px 0 16px">You can change this later in Profile.</div>'+
       free + pro);
+  }
+
+  /* ---- Pro gating (spec Fix 4): one upgrade path shared by every locked surface ---- */
+  var PRO_BLURB = "Unlimited trips, booking-window & max-stay alerts, member numbers + one-tap copy, the Payback calculator, Coverage-near-a-prospect, and Perks intelligence.";
+  function openUpgrade(feature){ state.upsell = feature || true; render(); }
+  /* A whole locked surface — teaser + Go Pro CTA (consistent upsell, never a silent blank). */
+  function lockedCard(title, teaser){
+    return '<div class="det" style="border-color:rgba(207,90,38,.30);background:rgba(207,90,38,.04)">'+
+      '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.ember+'">'+ic("lock",15,C.ember)+'</span>'+
+      '<div class="dlabel" style="font-size:12px;margin:0">'+esc(title)+' · Pro</div></div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:8px;line-height:1.5">'+esc(teaser)+'</div>'+
+      '<button class="btnG tap" data-act="go-pro" style="margin-top:12px">Go Pro to unlock</button></div>';
+  }
+  /* A small inline lock note for in-flow spots (e.g. a park’s booking screen). */
+  function lockedInline(msg){
+    return '<div style="margin-top:14px;font-size:12.5px;color:'+C.muted+';display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+ic("lock",13,C.ember)+esc(msg)+' <button class="tap" data-act="go-pro" style="color:'+C.green+';font-weight:700;font-size:12.5px">Go Pro</button></div>';
+  }
+  /* The shared upgrade overlay, drawn over the app when state.upsell is set. Reuses the live checkout
+     (auth-subscribe). The card carries data-act="noop" so taps inside it reach their own buttons via the
+     delegated handler without bubbling to the backdrop’s close. */
+  function upgradeOverlayHTML(){
+    if (!state.upsell) return "";
+    var a = state.account;
+    var btnOrange = "margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:800;font-size:15px";
+    var btnOutline = "margin-top:10px;width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#faf6ec;font-weight:700;font-size:13.5px";
+    var pay = a.payUnavailable
+      ? '<div style="color:#f3cdb0;font-size:12.5px;font-weight:600;margin-top:12px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>'
+      : '<button class="tap" data-act="auth-subscribe" data-arg="annual" style="'+btnOrange+'"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Go Pro · $54/yr ($4.50/mo)")+'</button>'+
+        '<button class="tap" data-act="auth-subscribe" data-arg="monthly" style="'+btnOutline+'"'+(a.busy?" disabled":"")+'>Go Pro · $6.50/mo</button>';
+    return '<div data-act="upsell-close" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#1f3d2c;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 20px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="display:flex;align-items:center;gap:9px"><span style="color:#e0875a">'+ic("lock",20,"#e0875a")+'</span>'+
+          '<div class="disp" style="color:#faf6ec;font-size:19px;font-weight:800">A Pro feature</div></div>'+
+        '<div style="color:#a9bdab;font-size:13px;line-height:1.55;margin-top:10px">'+esc(PRO_BLURB)+'</div>'+
+        pay +
+        '<button class="tap" data-act="upsell-close" style="margin-top:12px;width:100%;padding:10px;color:#a9bdab;font-weight:700;font-size:13px;background:none">Not now</button>'+
+      '</div></div>';
   }
 
   function render(){
@@ -2702,6 +2814,7 @@
     // - signed in -> the app.  sb===null (Supabase unreachable) -> never lock out: fall through to the app.
     if (sb && !state.authChecked){ app.innerHTML = authLoadingView(); return; }
     if (sb && state.authChecked && !signedIn()){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
+    if (sb && state.authChecked && signedIn() && state.confirmCheckout && !state.isPaid){ app.innerHTML = confirmingView(); return; }   // post-checkout: confirming Pro before falling back to plan page
     if (sb && state.authChecked && signedIn() && !hasChosenPlan()){ app.innerHTML = planChoiceView(); return; }   // one-time onboarding choice
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
@@ -2717,7 +2830,7 @@
       '<div class="content">'+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>';
+    '</div>' + upgradeOverlayHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -2749,10 +2862,13 @@
     }
     else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
     else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ window.open(NETWORKS[pp.network].url,"_blank"); } }
-    else if (act==="copynum"){ var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
+    else if (act==="copynum"){ if(!isPro()){ openUpgrade("copy"); return; } var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
+    else if (act==="go-pro"){ openUpgrade(arg||true); }
+    else if (act==="upsell-close"){ state.upsell=null; render(); }
     else if (act==="addtrip"){
       var pk=parkById(state.selected);
       if (!pk) return;
+      if (!isPro() && state.trips.length >= 2){ openUpgrade("trips"); return; }   // Pro: unlimited trips; Free cap = 2
       if (!state.dates.in || !state.dates.out){ alert("Pick your arrival and departure dates first."); return; }
       if (nightsBetween(state.dates.in, state.dates.out) < 1){ render(); return; }   // dep<=arr → blocked; inline error shows
       var os = overStayInfo(pk.network, state.dates.in, state.dates.out);
