@@ -2234,18 +2234,28 @@
   }
   /* Reads the user's subscription row (RLS = own row only) and derives isPro. Drives the badge AND the gates. */
   function refreshSubscription(){
-    if (!sb || !state.account.session){ state.isPaid = false; state.account.subStatus = null; return Promise.resolve(); }
-    var uid = state.account.session.user && state.account.session.user.id;
-    // Filter by user_id explicitly (don't rely on RLS alone) so maybeSingle never sees >1 row and throws.
-    // Returns its promise so the checkout poll can act on the CONFIRMED result, not a stale read.
-    return sb.from("subscriptions").select("status,current_period_end").eq("user_id", uid).maybeSingle().then(function(r){
-      var row = r && r.data;
-      // not expired = no period end yet (null) OR a future one — matches the spec deriveIsPro invariant.
-      var notExpired = row && (!row.current_period_end || (new Date(row.current_period_end).getTime() > Date.now()));
-      state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && notExpired);
-      state.account.subStatus = row ? row.status : null;
-      if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
-      render();
+    if (!sb){ state.isPaid = false; state.account.subStatus = null; return Promise.resolve(); }
+    // Read entitlement with an EXPLICITLY-authenticated PostgREST request. supabase-js intermittently
+    // fails to attach the user JWT to from() queries on the checkout-return load (the session is restored
+    // but the rest client stays anon), so RLS returns []. Pulling the token from getSession() and sending
+    // it ourselves (apikey + Bearer) guarantees the authed read — entitlement still derives ONLY from the row.
+    return sb.auth.getSession().then(function(r){
+      var session = (r && r.data && r.data.session) || state.account.session;
+      var tok = session && session.access_token;
+      var uid = session && session.user && session.user.id;
+      if (session) state.account.session = session;
+      if (!tok || !uid){ state.isPaid = false; state.account.subStatus = null; return; }
+      return fetch(SUPABASE_URL + "/rest/v1/subscriptions?select=status,current_period_end&user_id=eq." + uid, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + tok }
+      }).then(function(resp){ return resp.ok ? resp.json() : []; }).then(function(rows){
+        var row = rows && rows[0];
+        // not expired = no period end yet (null) OR a future one — matches the spec deriveIsPro invariant.
+        var notExpired = row && (!row.current_period_end || (new Date(row.current_period_end).getTime() > Date.now()));
+        state.isPaid = !!(row && (row.status === "active" || row.status === "trialing") && notExpired);
+        state.account.subStatus = row ? row.status : null;
+        if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
+        render();
+      });
     }).catch(function(){});
   }
   /* Realtime: flip the UI the instant the webhook writes the row — no reload, ahead of the poll (spec Fix 3). */
