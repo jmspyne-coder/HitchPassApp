@@ -1,43 +1,44 @@
-// POST /api/create-portal-session
-// Body: { email?: "user@example.com", customerId?: "cus_..." }
-// Opens the Stripe Customer Portal so the user can cancel, change plan,
-// update their card, or view invoices. This is the compliant "cancel anytime"
-// path your Terms promise — no custom UI needed.
-//
-// Works as a Vercel serverless function (file at /api/...) OR a Next.js
-// Pages API route (file at /pages/api/...). Same contents either way.
+/* Vercel serverless function: open the Stripe Customer Portal for the signed-in user.
+   This is the compliant self-serve "cancel / manage subscription" path.
 
-import Stripe from 'stripe';
+   Identity comes from the verified Supabase JWT (never a client-sent id/email), matching the other
+   endpoints. We resolve the user's Stripe customer by their verified email and create a billing-portal
+   session; the client redirects to it. The portal lets them cancel, change card, and view invoices. */
+const Stripe = require("stripe");
+const { createClient } = require("@supabase/supabase-js");
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+module.exports = async (req, res) => {
+  if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   try {
-    let { email, customerId } = req.body || {};
+    var stripeKey = process.env.STRIPE_SECRET_KEY;
+    var supaUrl = process.env.SUPABASE_URL;
+    var anonKey = process.env.SUPABASE_ANON_KEY;
+    var appUrl = process.env.APP_URL || "https://hitch-pass-app.vercel.app";
+    if (!stripeKey || !supaUrl || !anonKey) { res.status(500).json({ error: "Server not configured" }); return; }
 
-    // If you didn't store the Stripe customer id yet, look it up by email.
-    // (Storing customerId on the user later is more robust, but this works day one.)
-    if (!customerId && email) {
-      const list = await stripe.customers.list({ email, limit: 1 });
-      if (list.data.length) customerId = list.data[0].id;
-    }
+    // --- verify the caller from their Supabase access token ---
+    var authz = req.headers.authorization || "";
+    var token = authz.indexOf("Bearer ") === 0 ? authz.slice(7) : "";
+    if (!token) { res.status(401).json({ error: "Sign in required" }); return; }
+    var supa = createClient(supaUrl, anonKey);
+    var userRes = await supa.auth.getUser(token);
+    var user = userRes && userRes.data && userRes.data.user;
+    if (!user || userRes.error) { res.status(401).json({ error: "Invalid session — sign in again" }); return; }
 
-    if (!customerId) {
-      return res.status(404).json({ error: 'No subscription found for this account' });
-    }
+    var stripe = new Stripe(stripeKey);
+    var list = await stripe.customers.list({ email: user.email, limit: 1 });
+    var customer = (list && list.data && list.data[0]) || null;
+    if (!customer) { res.status(404).json({ error: "No subscription found for this account" }); return; }
 
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${process.env.APP_URL}/account`,
+    var session = await stripe.billingPortal.sessions.create({
+      customer: customer.id,
+      return_url: appUrl + "/?portal=return"
     });
-
-    return res.status(200).json({ url: session.url });
+    res.status(200).json({ url: session.url });
   } catch (err) {
-    console.error('create-portal-session error:', err);
-    return res.status(500).json({ error: 'Could not open billing portal' });
+    console.error("create-portal-session error:", (err && err.message) || err);
+    // Surface a clear message if the portal hasn't been enabled in the Stripe dashboard yet.
+    var msg = (err && err.message) || "Could not open billing portal";
+    res.status(500).json({ error: msg });
   }
-}
+};

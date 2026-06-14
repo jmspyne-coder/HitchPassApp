@@ -2353,6 +2353,19 @@
       else { a.busy = false; a.payUnavailable = true; a.error = (d && d.error) || "Payments aren’t live yet."; render(); }
     }).catch(function(){ a.busy = false; a.payUnavailable = true; a.error = "Payments aren’t live yet."; render(); });
   }
+  /* Open the Stripe Customer Portal so the user can cancel / change card / view invoices (self-serve). */
+  function openBillingPortal(){
+    var a = state.account;
+    if (!sb || !a.session){ a.error = "Sign in first."; render(); return; }
+    a.busy = true; a.error = ""; render();
+    fetch("/api/create-portal-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + a.session.access_token }
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d && d.url){ window.location.href = d.url; }
+      else { a.busy = false; a.error = (d && d.error) || "Couldn’t open the billing portal."; render(); }
+    }).catch(function(){ a.busy = false; a.error = "Couldn’t open the billing portal."; render(); });
+  }
   /* "Has this user chosen a plan?" — paid (active sub) OR a per-user local free flag. */
   function planKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_plan_choice:" + u.id) : null; }
   function hasChosenPlan(){
@@ -2400,7 +2413,9 @@
       var planBadge = '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>';
       var payNote = a.payUnavailable ? '<div style="font-size:11.5px;color:'+C.clay+';font-weight:600;margin-top:8px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>' : "";
       var subBlock = state.isPaid
-        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — all Pro features are unlocked.</div>'
+        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — all Pro features are unlocked.</div>'+
+          '<button class="btnO tap" data-act="manage-sub" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Opening…":"Manage / cancel subscription")+'</button>'+
+          '<div style="font-size:11px;color:'+C.muted+';margin-top:7px;line-height:1.5">Opens Stripe’s secure portal to cancel, change plan, update your card, or view invoices. Cancel takes effect at the end of your paid period.</div>'
         : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to unlock unlimited trips, booking-window &amp; max-stay alerts, member-number copy, the Payback calculator, Coverage-near-a-prospect, and Perks.</div>'+
           '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
           '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote;
@@ -2943,6 +2958,7 @@
     else if (act==="auth-submit"){ authPassword(); }
     else if (act==="auth-toggle-mode"){ authToggleMode(); }
     else if (act==="auth-subscribe"){ authSubscribe(arg); }
+    else if (act==="manage-sub"){ openBillingPortal(); }
     else if (act==="plan-free"){ choosePlanFree(); }
     else if (act==="auth-signout"){ authSignOut(); }
     else if (act==="wallet-toggle"){
