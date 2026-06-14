@@ -3006,10 +3006,11 @@
     if (bk){ state.bookingForm[bk]=t.value; return; }
   });
 
-  /* Re-check entitlement whenever the tab regains focus/visibility. Catches delayed activation the
-     instant the user returns — e.g. after a multi-minute 3-D Secure auth or a slow webhook — so Pro
-     appears without a manual refresh. Cheap: only fires when signed in and not already Pro. */
-  function recheckIfBackground(){ if (sb && state.account.session && !state.isPaid) refreshSubscription(); }
+  /* Re-check entitlement whenever the tab regains focus/visibility. Re-reads in BOTH directions:
+     upgrades when activation lands (3-DS / slow webhook) AND downgrades when a subscription was
+     canceled in another tab (Stripe portal/dashboard). Safe to run while Pro because refreshSubscription
+     never clobbers Pro on an empty read — only a real row with a non-active status downgrades. */
+  function recheckIfBackground(){ if (sb && state.account.session) refreshSubscription(); }
   document.addEventListener("visibilitychange", function(){ if (!document.hidden) recheckIfBackground(); });
   window.addEventListener("focus", recheckIfBackground);
   window.addEventListener("pageshow", recheckIfBackground);
