@@ -2261,8 +2261,17 @@
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + tok }
       }).then(function(resp){ return resp.ok ? resp.json() : []; }).then(function(rows){
         var row = rows && rows[0];
-        state.isPaid = !!(row && (row.status === "active" || row.status === "trialing"));
-        state.account.subStatus = row ? row.status : null;
+        if (row) {
+          // A row present is authoritative: active/trialing -> Pro, anything else (canceled/past_due) -> Free.
+          state.isPaid = (row.status === "active" || row.status === "trialing");
+          state.account.subStatus = row.status;
+        } else if (!state.isPaid) {
+          // No row AND not already Pro -> Free. Do NOT clobber a just-confirmed Pro on an empty read:
+          // PostgREST has a brief read-after-write lag that returns [] right after the row is written,
+          // and an in-flight focus/boot read could otherwise undo the confirm-checkout flip. Cancellation
+          // is a row with status=canceled (handled above), never an empty result, so this stays correct.
+          state.account.subStatus = null;
+        }
         if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
         render();
       });
