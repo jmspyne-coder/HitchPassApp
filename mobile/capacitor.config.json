@@ -1,0 +1,13 @@
+{
+  "appId": "app.hitchpass.mobile",
+  "appName": "Hitch Pass",
+  "webDir": "www",
+  "server": {
+    "url": "https://hitchpass.vercel.app",
+    "cleartext": false
+  },
+  "ios": {
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "appendUserAgent": "HitchPassiOS"
+}

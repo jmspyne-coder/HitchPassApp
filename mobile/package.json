@@ -1,0 +1,13 @@
+{
+  "name": "hitchpass-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor iOS wrapper for Hitch Pass (loads the live PWA).",
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
