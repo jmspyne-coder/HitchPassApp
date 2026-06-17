@@ -2048,6 +2048,7 @@
 
     var actions = '<div style="display:flex;gap:8px;margin-top:12px">'+
       (p ? '<button class="btnO tap" data-act="trip-view" data-arg="'+t.id+'" style="flex:1">View park</button>' : '')+
+      '<button class="tap" data-act="trip-edit" data-arg="'+t.id+'" style="flex:1;padding:11px;text-align:center;border-radius:11px;border:1px solid rgba(31,28,23,.22);color:'+C.green+';font-weight:700;font-size:13px">Edit</button>'+
       '<button class="tap" data-act="trip-remove" data-arg="'+t.id+'" style="'+(p?'padding:11px 14px':'flex:1;padding:11px;text-align:center')+';border-radius:11px;border:1px solid rgba(168,71,47,.3);color:'+C.clay+';font-weight:700;font-size:13px">Remove</button>'+
       '</div>';
 
@@ -2115,8 +2116,9 @@
 
   function bookingFormView(){
     var f = state.bookingForm;
-    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">Add a booking</div>'+
-      '<div style="font-size:12.5px;color:'+C.muted+'">Log a reservation you’ve already made</div></div>';
+    var editing = state.editingTripId != null;
+    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">'+(editing?"Edit trip":"Add a booking")+'</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+'">'+(editing?"Update the details of this trip":"Log a reservation you’ve already made")+'</div></div>';
     var parkSection;
     if (!f.custom){
       var picked = f.parkId ? parkById(f.parkId) : null;
@@ -2148,31 +2150,35 @@
         return bOver ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+bOver.nights+' nights exceeds '+esc(NETWORKS[bNet].short)+'’s '+bOver.limit+'-night max stay.</div>' : '';
       })()+
       (f.error ? '<div style="margin-top:11px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+esc(f.error)+'</div>' : '')+
-      '<button class="btnG tap" data-act="booking-save" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Save booking</button>'+
+      '<button class="btnG tap" data-act="booking-save" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+(editing?"Update trip":"Save booking")+'</button>'+
       '<button class="btnO tap" data-act="booking-cancel" style="margin-top:10px">Cancel</button>'+
       '</div>';
   }
 
   function saveBooking(){
     var f = state.bookingForm;
-    if (!isPro() && state.trips.length >= 2){ openUpgrade("trips"); return; }   // Pro: unlimited trips; Free cap = 2
+    var editing = state.editingTripId != null;
+    if (!editing && !isPro() && state.trips.length >= 2){ openUpgrade("trips"); return; }   // Pro: unlimited trips; Free cap = 2 (editing an existing trip is always allowed)
     var hasPark = f.custom ? (!!f.parkName.trim() && !!f.network) : (f.parkId!=null);
     if (!hasPark){ f.error = f.custom ? "Enter a park name and pick a network." : "Search and pick a park, or use “Not in the list?”"; render(); return; }
     if (!f.dateIn || !f.dateOut){ f.error = "Pick your arrival and departure dates."; render(); return; }
     if (nightsBetween(f.dateIn, f.dateOut) < 1){ f.error = "Departure must be after arrival."; render(); return; }
     var network = f.custom ? f.network : (parkById(f.parkId)||{}).network;
     var os = overStayInfo(network, f.dateIn, f.dateOut);
-    state.trips.push({
-      id: Date.now(),
+    var orig = editing ? tripById(state.editingTripId) : null;
+    var rec = {
+      id: editing ? state.editingTripId : Date.now(),
       parkId: f.custom ? null : f.parkId,
       parkName: f.custom ? f.parkName.trim() : undefined,
       dateIn: f.dateIn, dateOut: f.dateOut,
       network: network,
       confirmation: f.confirmation.trim(),
       note: f.note.trim(),
-      booked: true,
+      booked: editing ? (orig && orig.booked) : true,
       overStay: os || false
-    });
+    };
+    if (editing){ state.trips = state.trips.map(function(t){ return String(t.id)===String(state.editingTripId) ? rec : t; }); state.editingTripId = null; }
+    else { state.trips.push(rec); }
     persist();
     state.addBooking=false; state.bookingForm=freshBookingForm();
     state.tab="trips"; render();
@@ -3024,13 +3030,21 @@
     else if (act==="perks-compare"){ state.perksCompare=!state.perksCompare; render(); }
     else if (act==="tools-radius"){ state.tools.radius=parseInt(arg,10); render(); }
     else if (act==="send-referral"){ var su=buildReferralSMS(); if(su){ window.location.href=su; } }
-    else if (act==="add-booking"){ state.bookingForm=freshBookingForm(); state.addBooking=true; render(); }
+    else if (act==="add-booking"){ state.bookingForm=freshBookingForm(); state.addBooking=true; state.editingTripId=null; render(); }
     else if (act==="booking-custom"){ state.bookingForm.custom=true; state.bookingForm.parkId=null; state.bookingForm.error=""; render(); }
     else if (act==="booking-search"){ state.bookingForm.custom=false; state.bookingForm.error=""; render(); }
     else if (act==="booking-pick"){ var bp=parkById(parseInt(arg,10)); if(bp){ var bf=state.bookingForm; bf.parkId=bp.id; bf.network=bp.network; bf.parkQuery=bp.name; bf.error=""; } render(); }
-    else if (act==="booking-cancel"){ state.addBooking=false; state.bookingForm=freshBookingForm(); render(); }
+    else if (act==="booking-cancel"){ state.addBooking=false; state.bookingForm=freshBookingForm(); state.editingTripId=null; render(); }
     else if (act==="booking-save"){ saveBooking(); }
     else if (act==="trip-view"){ var tv=tripById(arg); if(tv){ state.tab="explore"; state.selected=tv.parkId; state.dates={in:tv.dateIn||"",out:tv.dateOut||""}; render(); } }
+    else if (act==="trip-edit"){
+      var teTrip=tripById(arg);
+      if (teTrip){
+        var tePk = teTrip.parkId ? parkById(teTrip.parkId) : null;
+        state.bookingForm = { parkQuery: tePk ? tePk.name : (teTrip.parkName||""), parkId: teTrip.parkId||null, parkName: teTrip.parkName||"", network: teTrip.network||"", custom: !teTrip.parkId, dateIn: teTrip.dateIn||"", dateOut: teTrip.dateOut||"", confirmation: teTrip.confirmation||"", note: teTrip.note||"", error:"" };
+        state.editingTripId = teTrip.id; state.addBooking = true; state.tab="trips"; render();
+      }
+    }
     else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
     else if (act==="trip-remove"){
       var trm=tripById(arg);
