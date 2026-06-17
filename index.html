@@ -2355,6 +2355,7 @@
   }
   function authSubscribe(plan){
     var a = state.account;
+    if (IS_IOS_APP){ return; }   // in-app purchases disabled on iOS (App Store 3.1.1) — upgrade on the web
     if (!sb || !a.session){ a.error = "Sign in first to subscribe."; render(); return; }
     a.busy = true; a.error = ""; a.payUnavailable = false; render();
     fetch("/api/create-checkout", {
@@ -2430,8 +2431,9 @@
           '<button class="btnO tap" data-act="manage-sub" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Opening…":"Manage / cancel subscription")+'</button>'+
           '<div style="font-size:11px;color:'+C.muted+';margin-top:7px;line-height:1.5">Opens Stripe’s secure portal to cancel, change plan, update your card, or view invoices. Cancel takes effect at the end of your paid period.</div>'
         : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to unlock unlimited trips, booking-window &amp; max-stay alerts, member-number copy, the Payback calculator, Coverage-near-a-prospect, and Perks.</div>'+
-          '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
-          '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote;
+          (IS_IOS_APP ? webUpgradeNote()
+            : '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
+              '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote);
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px">'+
           '<div style="font-size:13.5px">Signed in as <b>'+esc(a.session.user.email||"")+'</b></div>'+planBadge+
@@ -2840,7 +2842,9 @@
       '<div style="font-weight:800;font-size:16px;color:#1f1c17">Free</div>'+
       '<div style="font-size:12px;color:#5b5446;margin-top:5px;line-height:1.5">Full park map, Explore, search, network + region filters, view your membership cards, and up to 2 saved trips.</div>'+
       '<button class="tap" data-act="plan-free" style="'+btnGreen+'">Start free</button></div>';
-    var proInner = a.payUnavailable
+    var proInner = IS_IOS_APP
+      ? webUpgradeNote()
+      : a.payUnavailable
       ? '<div style="font-size:12px;color:'+C.clay+';font-weight:600;margin-top:10px;line-height:1.5">Payments aren’t live yet — start free for now; you can upgrade later in Profile.</div>'
       : '<button class="tap" data-act="auth-subscribe" data-arg="annual" style="'+btnOrange+'"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Go Pro · $54/yr ($4.50/mo)")+'</button>'+
         '<button class="tap" data-act="auth-subscribe" data-arg="monthly" style="'+btnOutline+'"'+(a.busy?" disabled":"")+'>Go Pro · $6.50/mo</button>';
@@ -2861,6 +2865,15 @@
   }
 
   /* ---- Pro gating (spec Fix 4): one upgrade path shared by every locked surface ---- */
+  /* Inside the iOS app (Capacitor sets this UA tag), Apple requires their in-app billing for
+     digital subscriptions — so we hide the Stripe buy buttons (guideline 3.1.1) and link users
+     to the website to upgrade. In Safari/SafariVC the tag is absent, so the buy buttons show. */
+  var IS_IOS_APP = /HitchPassiOS/i.test(navigator.userAgent || "");
+  function webUpgradeNote(){
+    return '<div style="font-size:12.5px;color:'+C.muted+';margin-top:11px;line-height:1.6">'+
+      'Manage your Hitch Pass plan on our website. '+
+      '<a href="https://hitchpass.vercel.app/?upgrade=1" target="_blank" rel="noopener" style="color:'+C.green+';font-weight:700;text-decoration:underline">Upgrade on the web →</a></div>';
+  }
   var PRO_BLURB = "Unlimited trips, booking-window & max-stay alerts, member numbers + one-tap copy, the Payback calculator, Coverage-near-a-prospect, and Perks intelligence.";
   function openUpgrade(feature){ state.upsell = feature || true; render(); }
   /* A whole locked surface — teaser + Go Pro CTA (consistent upsell, never a silent blank). */
@@ -2883,7 +2896,9 @@
     var a = state.account;
     var btnOrange = "margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:800;font-size:15px";
     var btnOutline = "margin-top:10px;width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#faf6ec;font-weight:700;font-size:13.5px";
-    var pay = a.payUnavailable
+    var pay = IS_IOS_APP
+      ? webUpgradeNote()
+      : a.payUnavailable
       ? '<div style="color:#f3cdb0;font-size:12.5px;font-weight:600;margin-top:12px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>'
       : '<button class="tap" data-act="auth-subscribe" data-arg="annual" style="'+btnOrange+'"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Go Pro · $54/yr ($4.50/mo)")+'</button>'+
         '<button class="tap" data-act="auth-subscribe" data-arg="monthly" style="'+btnOutline+'"'+(a.busy?" disabled":"")+'>Go Pro · $6.50/mo</button>';
