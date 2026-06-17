@@ -35,7 +35,7 @@ workflows:
             --certificate-key=@file:/tmp/cert_key.pem \
             --create
       - name: Add signing certificate to keychain
-        script: keychain add-certificates --certificate-key=@file:/tmp/cert_key.pem
+        script: keychain add-certificates
       - name: Apply provisioning profiles to the Xcode project
         script: |
           cd mobile/ios/App
