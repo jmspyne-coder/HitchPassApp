@@ -1529,6 +1529,7 @@
     refer: { friendName:"", friendPhone:"", friendEmail:"" },
     tools: { city:"", radius:200, nights:30, perNight:55, dues:645 },
     addBooking: false,
+    pendingBook: null, bookReturnShow: false,   // "you tapped Book now" → prompt to save a trip on return
     bookingForm: freshBookingForm(),
     exploreMode: "list",
     explorePage: 1,
@@ -2079,7 +2080,7 @@
         if (tripMapUrl(t)) btns += '<button class="tap" data-act="trip-dir" data-arg="'+t.id+'" style="'+sub+'">'+ic("pin",14,C.pine)+'Directions</button>';
         if (t.dateIn&&t.dateOut) btns += '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="'+sub+'">'+ic("calendar",14,C.pine)+'Add to calendar</button>';
         var bn = NETWORKS[t.network];
-        if (bn && bn.url) btns += '<a href="'+esc(bn.url)+'" target="_blank" rel="noopener" class="tap" style="flex:1;min-width:92px;padding:10px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">Book now ↗</a>';
+        if (bn && bn.url) btns += '<button class="tap" data-act="book-now-trip" data-arg="'+t.id+'" style="flex:1;min-width:92px;padding:10px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px">Book now ↗</button>';
         return btns ? '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'+btns+'</div>' : "";
       })()+
       '</div>';
@@ -2192,7 +2193,7 @@
       network: network,
       confirmation: f.confirmation.trim(),
       note: f.note.trim(),
-      booked: editing ? (orig && orig.booked) : true,
+      booked: editing ? !!(f.markBooked || (orig && orig.booked)) : true,
       overStay: os || false
     };
     if (editing){ state.trips = state.trips.map(function(t){ return String(t.id)===String(state.editingTripId) ? rec : t; }); state.editingTripId = null; }
@@ -3086,6 +3087,19 @@
         '<button class="tap" data-act="cal-close" style="width:100%;margin-top:12px;color:#a9bdab;font-weight:700;font-size:13px;background:none">Close</button>'+
       '</div></div>';
   }
+  /* "All booked? Add to Trips" prompt shown when you return from the Book-now site. */
+  function bookReturnHTML(){
+    if (!state.bookReturnShow || !state.pendingBook) return "";
+    var pb = state.pendingBook;
+    var name = (pb.parkId ? (parkById(pb.parkId)||{}).name : null) || pb.parkName || "this park";
+    return '<div data-act="book-return-dismiss" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#1f3d2c;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 20px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="color:#faf6ec;font-size:17px;font-weight:800;text-align:center">All booked? 🏕️</div>'+
+        '<div style="color:#a9bdab;font-size:12.5px;text-align:center;margin:6px 0 2px;line-height:1.5">Add <b style="color:#faf6ec">'+esc(name)+'</b> to your Trips — park &amp; dates pre-filled, just add the confirmation #.</div>'+
+        '<button class="tap" data-act="book-save-trip" style="width:100%;margin-top:13px;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:800;font-size:15px">Add to my Trips</button>'+
+        '<button class="tap" data-act="book-return-dismiss" style="width:100%;margin-top:10px;color:#a9bdab;font-weight:700;font-size:13px;background:none">Not now</button>'+
+      '</div></div>';
+  }
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
@@ -3111,7 +3125,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -3144,7 +3158,19 @@
       var pl=document.getElementById("plist"); if(pl){ pl.innerHTML=listHTML(); pl.scrollIntoView({block:"start"}); } else render();
     }
     else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
-    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ window.open(NETWORKS[pp.network].url,"_blank"); } }
+    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ state.pendingBook={ fromTripId:null, parkId:pp.id, parkName:null, network:pp.network, dateIn:(state.dates&&state.dates.in)||"", dateOut:(state.dates&&state.dates.out)||"", ts:Date.now() }; window.open(NETWORKS[pp.network].url,"_blank"); } }
+    else if (act==="book-now-trip"){ var bt=tripById(arg); if(bt){ var bnet=NETWORKS[bt.network]; state.pendingBook={ fromTripId:bt.id, parkId:bt.parkId||null, parkName:bt.parkName||null, network:bt.network, dateIn:bt.dateIn||"", dateOut:bt.dateOut||"", ts:Date.now() }; if(bnet&&bnet.url) window.open(bnet.url,"_blank"); } }
+    else if (act==="book-return-dismiss"){ state.bookReturnShow=false; state.pendingBook=null; render(); }
+    else if (act==="book-save-trip"){
+      var pb=state.pendingBook;
+      if (pb){
+        var bp = pb.parkId ? parkById(pb.parkId) : null;
+        state.bookingForm = { parkQuery: bp?bp.name:(pb.parkName||""), parkId: pb.parkId||null, parkName: pb.parkName||"", network: pb.network||"", custom: !pb.parkId, dateIn: pb.dateIn||"", dateOut: pb.dateOut||"", confirmation:"", note:"", error:"", markBooked:true };
+        state.editingTripId = pb.fromTripId || null;
+        if (pb.fromTripId){ var ex=tripById(pb.fromTripId); if(ex){ state.bookingForm.confirmation=ex.confirmation||""; state.bookingForm.note=ex.note||""; } }
+        state.addBooking=true; state.tab="trips"; state.bookReturnShow=false; state.pendingBook=null; render();
+      }
+    }
     else if (act==="copynum"){ if(!isPro()){ openUpgrade("copy"); return; } var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
     else if (act==="go-pro"){ openUpgrade(arg||true); }
     else if (act==="upsell-close"){ state.upsell=null; render(); }
@@ -3252,6 +3278,10 @@
 
   render();
   try { var _inv = new URLSearchParams(location.search || "").get("invite"); if (_inv) localStorage.setItem("hp_invite", _inv.toLowerCase().trim()); } catch(e){}   // capture ?invite=CODE for the launch promo
+  // When you return from the external Book-now site, offer to save the trip (park + dates pre-filled).
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState==="visible" && state.pendingBook && !state.bookReturnShow && (Date.now()-(state.pendingBook.ts||0) > 3000)){ state.bookReturnShow = true; render(); }
+  });
   initAuth();   // restore any persisted Supabase session + reflect signed-in state (no-op if sb is null)
   var sp = document.getElementById("splash");
   if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }
