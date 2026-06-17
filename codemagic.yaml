@@ -1,6 +1,6 @@
 # Codemagic CI — builds the Hitch Pass iOS app (Capacitor wrapper in /mobile)
-# Signing: created automatically from the App Store Connect API key (Admin access),
-# so no manual certificate/profile setup is needed.
+# Signing: reuses a stored distribution cert if CERTIFICATE_PRIVATE_KEY is set
+# (secure env var); otherwise generates a temporary key (creates a new cert that build).
 workflows:
   ios-hitchpass:
     name: Hitch Pass iOS
@@ -24,10 +24,22 @@ workflows:
           cd mobile
           npx cap add ios 2>/dev/null || true
           npx cap sync ios
+      - name: Auto-answer export compliance (standard HTTPS only)
+        script: |
+          PLIST="mobile/ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST"
       - name: Initialize keychain
         script: keychain initialize
-      - name: Generate a private key for the signing certificate
-        script: openssl genrsa -out /tmp/cert_key.pem 2048
+      - name: Prepare signing certificate private key (reuse if stored)
+        script: |
+          if [ -n "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
+            echo "Using stored CERTIFICATE_PRIVATE_KEY — existing cert will be reused (no new cert)."
+          else
+            openssl genrsa -out /tmp/cert_key.pem 2048
+            echo "WARNING: CERTIFICATE_PRIVATE_KEY not set — generated a temporary key (a NEW cert will be created this build)."
+          fi
       - name: Create/fetch signing certificate + provisioning profile
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
