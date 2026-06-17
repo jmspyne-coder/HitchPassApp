@@ -26,13 +26,16 @@ workflows:
           npx cap sync ios
       - name: Initialize keychain
         script: keychain initialize
+      - name: Generate a private key for the signing certificate
+        script: openssl genrsa -out /tmp/cert_key.pem 2048
       - name: Create/fetch signing certificate + provisioning profile
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key=@file:/tmp/cert_key.pem \
             --create
       - name: Add signing certificate to keychain
-        script: keychain add-certificates
+        script: keychain add-certificates --certificate-key=@file:/tmp/cert_key.pem
       - name: Apply provisioning profiles to the Xcode project
         script: |
           cd mobile/ios/App
