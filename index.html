@@ -1514,9 +1514,10 @@
     tab: "home",
     wallet: saved.wallet || ["tt","enc"],
     trips: saved.trips || [],
+    favorites: saved.favorites || [],
     profile: saved.profile || { members:{}, rigLength:null },
     tier: saved.tier || "adventure",
-    q: "", netFilter: "", freeOnly: false,
+    q: "", netFilter: "", freeOnly: false, favOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
     account: { email:"", password:"", authMode:"login", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
     isPaid: false,   // entitlement (isPro) read from Supabase; gates the Pro surfaces (Fix 4)
@@ -1538,7 +1539,8 @@
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
   function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
   if (!state.profile.members) state.profile.members = {};
-  function persist(){ save({ wallet:state.wallet, trips:state.trips, profile:state.profile, tier:state.tier }); }
+  function persist(){ save({ wallet:state.wallet, trips:state.trips, favorites:state.favorites, profile:state.profile, tier:state.tier }); }
+  function isFav(id){ return !!(state.favorites && state.favorites.indexOf(id)>=0); }
 
 
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -1727,6 +1729,7 @@
     var q = state.q.trim().toLowerCase();
     var hasReg = state.regionFilter.size>0;
     return PARKS.filter(function(p){
+      if (state.favOnly && !isFav(p.id)) return false;
       if (!passesNonRegion(p,q)) return false;
       if (hasReg && !state.regionFilter.has(regionOf(p))) return false;   // region: independent geographic AND axis
       return true;
@@ -1754,7 +1757,9 @@
         '</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">'+(p.city?esc(p.city)+', ':'')+esc(p.st)+' · '+esc(regionOf(p))+'</div>'+
         '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+tags+'</div>'+
-      '</div>'+ic("chevron",18,C.muted)+'</button>';
+      '</div>'+
+      '<span class="tap" data-act="fav-toggle" data-arg="'+p.id+'" style="font-size:20px;line-height:1;padding:4px 6px;color:'+(isFav(p.id)?C.ember:"rgba(31,28,23,.28)")+'">'+(isFav(p.id)?"★":"☆")+'</span>'+
+      ic("chevron",18,C.muted)+'</button>';
   }
 
   function listHTML(){
@@ -1797,6 +1802,7 @@
     var chips = '<button class="fchip tap'+(state.netFilter===""?" on":"")+'" data-act="netfilter" data-arg="">All</button>';
     Object.keys(NETWORKS).forEach(function(id){ if (present[id] && !NETWORKS[id].cardOnly) chips += '<button class="fchip tap'+(state.netFilter===id?" on":"")+'" data-act="netfilter" data-arg="'+id+'">'+esc(NETWORKS[id].short)+'</button>'; });
     var freeChip = '<button class="fchip tap'+(state.freeOnly?" on":"")+'" data-act="freeonly">$0 in my wallet</button>';
+    var favChip = '<button class="fchip tap'+(state.favOnly?" on":"")+'" data-act="favonly">★ Saved</button>';
     // Region chips: REGION_ORDER, live count within current network selection, 0-count regions hidden.
     var rc = regionCounts();
     var regionChips = '<button class="fchip tap'+(state.regionFilter.size===0?" on":"")+'" data-act="regionall">All regions</button>';
@@ -1814,7 +1820,7 @@
         '<div class="disp" style="font-size:24px;font-weight:800">Explore</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:12px">Everywhere your wallet can take you</div>'+
         '<input id="q" class="q" placeholder="Search parks or cities" value="'+esc(state.q)+'" />'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+freeChip+'</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+chips+freeChip+favChip+'</div>'+
         regionRow+
         toggle+
       '</div>'+ body;
@@ -1985,6 +1991,8 @@
       bw + stayWarn + dateErr + memBlock +
       '<button class="btnG tap" data-act="addtrip" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Add to my trips</button>'+
       '<button class="btnO tap" data-act="reserve" style="margin-top:10px">Reserve on '+esc(net.short)+' '+ic("ext",13,C.pine)+'</button>'+
+      '<a href="https://www.google.com/search?q='+encodeURIComponent(p.name+" "+(p.city||"")+" "+(p.st||"")+" campground")+'" target="_blank" rel="noopener" class="tap" style="margin-top:10px;width:100%;padding:11px;border-radius:11px;border:1px solid rgba(31,28,23,.25);color:#1f3d2c;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">Find online (phone, hours, site) '+ic("ext",13,C.pine)+'</a>'+
+      '<button class="tap" data-act="fav-toggle" data-arg="'+p.id+'" style="margin-top:10px;width:100%;padding:11px;border-radius:11px;border:1px solid rgba(31,28,23,.18);background:transparent;color:'+(isFav(p.id)?C.ember:"#1f3d2c")+';font-weight:700;font-size:13px">'+(isFav(p.id)?"★ Saved to favorites":"☆ Save to favorites")+'</button>'+
       '</div>' + note();
   }
   function note(){
@@ -2066,10 +2074,13 @@
       (dateLine? '<div style="font-size:13px;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px">'+ic("calendar",14,C.pine)+esc(dateLine)+'</div>':'')+
       bw + chipsRow + noteRow + stayWarn + actions +
       (function(){
-        var mapUrl = tripMapUrl(t), btns = "";
-        if (mapUrl) btns += '<a href="'+mapUrl+'" target="_blank" rel="noopener" class="tap" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">'+ic("pin",14,C.pine)+'Directions</a>';
-        if (t.dateIn&&t.dateOut) btns += '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("calendar",14,C.pine)+'Add to calendar</button>';
-        return btns ? '<div style="display:flex;gap:8px;margin-top:8px">'+btns+'</div>' : "";
+        var sub = "flex:1;min-width:92px;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:"+C.pine+";font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px";
+        var btns = "";
+        if (tripMapUrl(t)) btns += '<button class="tap" data-act="trip-dir" data-arg="'+t.id+'" style="'+sub+'">'+ic("pin",14,C.pine)+'Directions</button>';
+        if (t.dateIn&&t.dateOut) btns += '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="'+sub+'">'+ic("calendar",14,C.pine)+'Add to calendar</button>';
+        var bn = NETWORKS[t.network];
+        if (bn && bn.url) btns += '<a href="'+esc(bn.url)+'" target="_blank" rel="noopener" class="tap" style="flex:1;min-width:92px;padding:10px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">Book now ↗</a>';
+        return btns ? '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'+btns+'</div>' : "";
       })()+
       '</div>';
   }
@@ -2960,6 +2971,28 @@
     var q = (p ? (p.name+" "+(p.city||"")+" "+(p.st||"")) : (t.parkName||"")).trim();
     return q ? "https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(q) : "";
   }
+  function appleMapUrl(t){
+    var p = t.parkId ? parkById(t.parkId) : null;
+    if (p && p.lat!=null && p.lng!=null) return "https://maps.apple.com/?daddr="+p.lat+","+p.lng+"&dirflg=d";
+    var q = (p ? (p.name+" "+(p.city||"")+" "+(p.st||"")) : (t.parkName||"")).trim();
+    return q ? "https://maps.apple.com/?daddr="+encodeURIComponent(q) : "";
+  }
+  /* Directions chooser (Google or Apple Maps), shown when state.dirTripId is set. */
+  function dirOverlayHTML(){
+    if (!state.dirTripId) return "";
+    var t = tripById(state.dirTripId); if (!t) return "";
+    var g = tripMapUrl(t), a = appleMapUrl(t);
+    var name = (t.parkId ? (parkById(t.parkId)||{}).name : null) || t.parkName || "this park";
+    var row = "display:block;width:100%;margin-top:10px;padding:13px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;text-decoration:none";
+    return '<div data-act="dir-close" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#1f3d2c;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 20px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="color:#faf6ec;font-size:17px;font-weight:800;text-align:center">Directions</div>'+
+        '<div style="color:#a9bdab;font-size:12.5px;text-align:center;margin:5px 0 2px">to '+esc(name)+'</div>'+
+        (g?'<a href="'+g+'" target="_blank" rel="noopener" class="tap" style="'+row+';background:#cf5a26;color:#fff">Google Maps</a>':'')+
+        (a?'<a href="'+a+'" target="_blank" rel="noopener" class="tap" style="'+row+';background:#faf6ec;color:#1f3d2c">Apple Maps</a>':'')+
+        '<button class="tap" data-act="dir-close" style="width:100%;margin-top:12px;color:#a9bdab;font-weight:700;font-size:13px;background:none">Close</button>'+
+      '</div></div>';
+  }
   /* ---- Add a trip to Google / Outlook / Apple calendars (all-day, spanning the stay) ---- */
   function tripCalData(t){
     var p = t.parkId ? parkById(t.parkId) : null;
@@ -3027,7 +3060,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -3049,6 +3082,8 @@
     else if (act==="back"){ state.selected=null; render(); }
     else if (act==="netfilter"){ state.netFilter=arg; state.explorePage=1; render(); }
     else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; state.explorePage=1; render(); }
+    else if (act==="favonly"){ state.favOnly=!state.favOnly; state.explorePage=1; render(); }
+    else if (act==="fav-toggle"){ var fid=parseInt(arg,10); var fi=state.favorites.indexOf(fid); if(fi<0) state.favorites.push(fid); else state.favorites.splice(fi,1); persist(); render(); }
     else if (act==="regionfilter"){ if (state.regionFilter.has(arg)) state.regionFilter.delete(arg); else state.regionFilter.add(arg); state.explorePage=1; render(); }
     else if (act==="regionall"){ state.regionFilter.clear(); state.explorePage=1; render(); }
     else if (act==="explore-mode"){ if (state.exploreMode!==arg){ state.exploreMode=arg; render(); } }
@@ -3109,6 +3144,8 @@
     else if (act==="trip-cal"){ state.calTripId=arg; render(); }
     else if (act==="trip-ics"){ var tci=tripById(arg); if(tci) downloadTripIcs(tci); }
     else if (act==="cal-close"){ state.calTripId=null; render(); }
+    else if (act==="trip-dir"){ state.dirTripId=arg; render(); }
+    else if (act==="dir-close"){ state.dirTripId=null; render(); }
     else if (act==="trip-remove"){
       var trm=tripById(arg);
       var pnm = (trm && parkById(trm.parkId)) ? parkById(trm.parkId).name : "this trip";
