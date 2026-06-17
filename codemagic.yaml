@@ -9,6 +9,8 @@ workflows:
     integrations:
       app_store_connect: HitchPass ASC API Key
     environment:
+      groups:
+        - signing
       vars:
         BUNDLE_ID: "app.hitchpass.mobile"
       node: 20
