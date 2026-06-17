@@ -2238,11 +2238,35 @@
   /* THE invariant (spec Fix 3): isPro is the single source of truth for entitlement. It is derived
      only from the subscriptions row (active/trialing + not expired) — never from hp_plan_choice. */
   function isPro(){ return !!state.isPaid; }
+  /* ---- launch invite: ?invite=CODE comps a free year to the first N who claim it ---- */
+  function inviteBanner(){
+    return '<div data-act="invite-dismiss" class="tap" style="background:#1f3d2c;color:#faf6ec;font-size:12.5px;font-weight:700;padding:11px 16px;line-height:1.45;text-align:center">'+esc(state.inviteMsg)+'</div>';
+  }
+  function maybeClaimInvite(){
+    var code; try { code = localStorage.getItem("hp_invite"); } catch(e){ code = null; }
+    if (!code || !sb) return;
+    sb.auth.getSession().then(function(r){
+      var session = (r && r.data) ? r.data.session : null;
+      var tok = session && session.access_token;
+      if (!tok) return;   // not signed in yet — retried on the next auth event
+      fetch("/api/claim-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + tok },
+        body: JSON.stringify({ code: code })
+      }).then(function(resp){ return resp.json(); }).then(function(d){
+        try { localStorage.removeItem("hp_invite"); } catch(e){}
+        var res = d && d.result;
+        if (res === "granted" || res === "already"){ state.inviteMsg = "You’re in — Pro unlocked free for a year. 🎉"; refreshSubscription(); }
+        else if (res === "exhausted"){ state.inviteMsg = "This invite is fully claimed — you’re on the free plan for now."; }
+        render();
+      }).catch(function(){});   // network error: keep hp_invite so it retries next load
+    }).catch(function(){});
+  }
   function initAuth(){
     if (!sb) return;
     // getSession reads the cached session from local storage (NO network) → offline-safe entry.
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); render(); }).catch(function(){ state.authChecked = true; render(); });
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); render(); }).catch(function(){ state.authChecked = true; render(); });
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
     // Returning from Stripe Checkout: the webhook writes the row a few seconds AFTER redirect, so show a
     // "Confirming…" screen and poll until the row lands — instead of dropping the user back on the plan page
     // (which reads like the payment failed even though it succeeded).
@@ -2934,7 +2958,7 @@
     else { body = homeView(); }
     app.innerHTML = '<div class="wrap">'+
       '<div class="ribbon">'+ic("alert",14,"#e0875a")+'<span>Unofficial · made by a customer, not by Thousand Trails / Encore / ELS · all names are trademarks of their owners</span></div>'+
-      '<div class="content">'+body+'</div>'+
+      '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
     '</div>' + upgradeOverlayHTML();
@@ -2986,6 +3010,7 @@
     else if (act==="auth-submit"){ authPassword(); }
     else if (act==="auth-toggle-mode"){ authToggleMode(); }
     else if (act==="auth-subscribe"){ authSubscribe(arg); }
+    else if (act==="invite-dismiss"){ state.inviteMsg = null; render(); }
     else if (act==="manage-sub"){ openBillingPortal(); }
     else if (act==="plan-free"){ choosePlanFree(); }
     else if (act==="auth-signout"){ authSignOut(); }
@@ -3060,6 +3085,7 @@
   window.addEventListener("pageshow", recheckIfBackground);
 
   render();
+  try { var _inv = new URLSearchParams(location.search || "").get("invite"); if (_inv) localStorage.setItem("hp_invite", _inv.toLowerCase().trim()); } catch(e){}   // capture ?invite=CODE for the launch promo
   initAuth();   // restore any persisted Supabase session + reflect signed-in state (no-op if sb is null)
   var sp = document.getElementById("splash");
   if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }
