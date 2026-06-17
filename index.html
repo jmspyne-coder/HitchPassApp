@@ -2108,7 +2108,8 @@
     var upcoming = trips.filter(function(t){ return !t.dateOut || t.dateOut>=today; });
     var past = trips.filter(function(t){ return t.dateOut && t.dateOut<today; });
     var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · windows &amp; check-ins tracked</div></div>'+
-      '<div style="padding:6px 16px 8px">';
+      '<div style="padding:6px 16px 8px">'+
+      (pushSupported() && !pushOn() ? '<button class="tap" data-act="enable-push" style="width:100%;margin-bottom:10px;padding:11px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("bell",15,"#faf6ec")+'Get booking-window alerts</button>' : '');
     html += upcoming.map(function(t){ return tripCard(t,false); }).join("");
     if (past.length){ html += '<div class="dlabel" style="margin:14px 2px 8px">Past</div>'+past.map(function(t){ return tripCard(t,true); }).join(""); }
     html += '</div>';
@@ -2197,6 +2198,7 @@
     if (editing){ state.trips = state.trips.map(function(t){ return String(t.id)===String(state.editingTripId) ? rec : t; }); state.editingTripId = null; }
     else { state.trips.push(rec); }
     persist();
+    refreshPushReminders();
     state.addBooking=false; state.bookingForm=freshBookingForm();
     state.tab="trips"; render();
   }
@@ -2263,6 +2265,55 @@
   function isPro(){ return !!state.isPaid; }
   /* Safe GA4 event helper — conversion tracking for Google/Facebook ads (no-op if gtag is blocked). */
   function track(name, params){ try { if (window.gtag) window.gtag("event", name, params || {}); } catch(e){} }
+  /* ---- Web Push: booking-window alerts (installed PWA / Android / desktop; not the TestFlight build) ---- */
+  var VAPID_PUBLIC = "BFQJwjf-s67QP4QhudRAqxoSz9x4MFN4ALXQcJnZk-eX-y8_UMlPJ7m6SGg5TXsmx2oyzeVIMhk_MM1KHMIoLo8";
+  function pushSupported(){ return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window); }
+  function pushOn(){ try { return localStorage.getItem("hp_push_on")==="1"; } catch(e){ return false; } }
+  function urlB64ToUint8Array(b64){
+    var pad = "=".repeat((4 - b64.length % 4) % 4);
+    var base = (b64 + pad).replace(/-/g,"+").replace(/_/g,"/");
+    var raw = atob(base), out = new Uint8Array(raw.length);
+    for (var i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function computeReminders(){
+    var out = [];
+    (state.trips||[]).forEach(function(t){
+      if (t.booked) return;                         // booked = already reserved
+      var p = t.parkId ? parkById(t.parkId) : null;
+      if (!p || !t.dateIn) return;
+      var bi = bookingInfo(p, t.dateIn);
+      if (bi && bi.openDate && bi.openIn>0){
+        function z(n){ return (n<10?"0":"")+n; }
+        var d = bi.openDate;
+        out.push({ trip_id:String(t.id), park_name:p.name, fire_on:d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()) });
+      }
+    });
+    return out;
+  }
+  function syncPush(subJson){
+    var tok = state.account.session && state.account.session.access_token;
+    if (!tok || !subJson) return;
+    fetch("/api/push-register", { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+tok },
+      body: JSON.stringify({ subscription: subJson, reminders: computeReminders() }) }).catch(function(){});
+  }
+  function refreshPushReminders(){
+    if (!pushOn() || !pushSupported()) return;
+    navigator.serviceWorker.ready.then(function(reg){ return reg.pushManager.getSubscription(); })
+      .then(function(sub){ if (sub) syncPush(sub.toJSON ? sub.toJSON() : sub); }).catch(function(){});
+  }
+  function enablePush(){
+    if (!pushSupported()){ alert("To get booking-window alerts, add Hitch Pass to your Home Screen first (Share → Add to Home Screen), then turn alerts on from there."); return; }
+    if (!state.account.session){ alert("Sign in first to turn on alerts."); return; }
+    Notification.requestPermission().then(function(perm){
+      if (perm !== "granted"){ alert("Notifications are blocked — enable them for Hitch Pass in Settings to get alerts."); return; }
+      navigator.serviceWorker.ready.then(function(reg){
+        reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC) })
+          .then(function(sub){ try{ localStorage.setItem("hp_push_on","1"); }catch(e){} syncPush(sub.toJSON ? sub.toJSON() : sub); render(); })
+          .catch(function(){ alert("Couldn’t turn on alerts. Try again."); });
+      });
+    });
+  }
   /* ---- launch invite: ?invite=CODE comps a free year to the first N who claim it ---- */
   function inviteBanner(){
     return '<div data-act="invite-dismiss" class="tap" style="background:#1f3d2c;color:#faf6ec;font-size:12.5px;font-weight:700;padding:11px 16px;line-height:1.45;text-align:center">'+esc(state.inviteMsg)+'</div>';
@@ -3146,10 +3197,11 @@
     else if (act==="cal-close"){ state.calTripId=null; render(); }
     else if (act==="trip-dir"){ state.dirTripId=arg; render(); }
     else if (act==="dir-close"){ state.dirTripId=null; render(); }
+    else if (act==="enable-push"){ enablePush(); }
     else if (act==="trip-remove"){
       var trm=tripById(arg);
       var pnm = (trm && parkById(trm.parkId)) ? parkById(trm.parkId).name : "this trip";
-      if (trm && confirm("Remove "+pnm+" from your trips?")){ state.trips=state.trips.filter(function(x){ return String(x.id)!==String(arg); }); persist(); render(); }
+      if (trm && confirm("Remove "+pnm+" from your trips?")){ state.trips=state.trips.filter(function(x){ return String(x.id)!==String(arg); }); persist(); refreshPushReminders(); render(); }
     }
   });
   document.addEventListener("input", function(e){

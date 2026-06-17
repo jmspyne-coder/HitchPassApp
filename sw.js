@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v10";
+var CACHE = "hitchpass-v11";
 
 /* Same-origin shell — must all cache or install fails (these always exist).
    Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */
@@ -73,6 +73,30 @@ self.addEventListener("fetch", function(e){
         }
         return res;
       }).catch(function(){ return Response.error(); });
+    })
+  );
+});
+
+/* ---- Web Push: booking-window alerts ---- */
+self.addEventListener("push", function(e){
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch(_){}
+  var title = data.title || "Hitch Pass";
+  var opts = {
+    body: data.body || "",
+    icon: "./icon-192.png?v=2",
+    badge: "./icon-192.png?v=2",
+    data: { url: data.url || "./" }
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+self.addEventListener("notificationclick", function(e){
+  e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(
+    clients.matchAll({ type:"window" }).then(function(cl){
+      for (var i=0;i<cl.length;i++){ if (cl[i].url.indexOf(url)>=0 && "focus" in cl[i]) return cl[i].focus(); }
+      if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });
