@@ -9,8 +9,6 @@ workflows:
     integrations:
       app_store_connect: HitchPass ASC API Key
     environment:
-      groups:
-        - signing
       vars:
         BUNDLE_ID: "app.hitchpass.mobile"
       node: 20
@@ -33,15 +31,8 @@ workflows:
             || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST"
       - name: Initialize keychain
         script: keychain initialize
-      - name: Prepare signing certificate private key (reuse if stored)
-        script: |
-          if [ -n "$CERTIFICATE_PRIVATE_KEY" ]; then
-            echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
-            echo "Using stored CERTIFICATE_PRIVATE_KEY — existing cert will be reused (no new cert)."
-          else
-            openssl genrsa -out /tmp/cert_key.pem 2048
-            echo "WARNING: CERTIFICATE_PRIVATE_KEY not set — generated a temporary key (a NEW cert will be created this build)."
-          fi
+      - name: Generate a private key for the signing certificate
+        script: openssl genrsa -out /tmp/cert_key.pem 2048
       - name: Create/fetch signing certificate + provisioning profile
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
