@@ -2065,6 +2065,7 @@
       '</div>'+
       (dateLine? '<div style="font-size:13px;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px">'+ic("calendar",14,C.pine)+esc(dateLine)+'</div>':'')+
       bw + chipsRow + noteRow + stayWarn + actions +
+      ((t.dateIn&&t.dateOut)? '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="width:100%;margin-top:8px;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("calendar",14,C.pine)+'Add to calendar</button>':'')+
       '</div>';
   }
 
@@ -2942,6 +2943,48 @@
       '</div></div>';
   }
 
+  /* ---- Add a trip to Google / Outlook / Apple calendars (all-day, spanning the stay) ---- */
+  function tripCalData(t){
+    var p = t.parkId ? parkById(t.parkId) : null;
+    var name = p ? p.name : (t.parkName || "Saved trip");
+    var net = NETWORKS[t.network] || (p ? NETWORKS[p.network] : null);
+    var title = "Hitch Pass · " + name + (net ? " ("+net.short+")" : "");
+    var nights = nightsBetween(t.dateIn, t.dateOut);
+    function compact(iso){ return iso ? iso.replace(/-/g,"") : ""; }
+    function plusDays(iso, n){ var d=new Date(iso+"T00:00:00"); d.setDate(d.getDate()+n); function z(x){return (x<10?"0":"")+x;} return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
+    var endExclIso = plusDays(t.dateOut, 1);   // all-day end is exclusive; +1 covers the checkout day
+    var details = nights+" night"+(nights===1?"":"s")+" stay"+(t.confirmation?" · Confirmation "+t.confirmation:"")+(t.note?" · "+t.note:"")+" · via Hitch Pass";
+    return { name:name, title:title, loc:name, startIso:t.dateIn, endExclIso:endExclIso, startYMD:compact(t.dateIn), endYMD:compact(endExclIso), details:details };
+  }
+  function downloadTripIcs(t){
+    if (!t || !t.dateIn || !t.dateOut) return;
+    var c = tripCalData(t);
+    var ics = "data:text/calendar;charset=utf8," + encodeURIComponent(
+      ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT",
+       "DTSTART;VALUE=DATE:"+c.startYMD,"DTEND;VALUE=DATE:"+c.endYMD,
+       "SUMMARY:"+c.title,"LOCATION:"+c.loc,"DESCRIPTION:"+c.details,
+       "END:VEVENT","END:VCALENDAR"].join("\n"));
+    var a=document.createElement("a"); a.href=ics; a.download="hitchpass-trip.ics"; document.body.appendChild(a); a.click(); a.remove();
+    state.calTripId=null; render();
+  }
+  function calOverlayHTML(){
+    if (!state.calTripId) return "";
+    var t = tripById(state.calTripId);
+    if (!t || !t.dateIn || !t.dateOut) return "";
+    var c = tripCalData(t), enc = encodeURIComponent;
+    var gUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+enc(c.title)+"&dates="+c.startYMD+"/"+c.endYMD+"&details="+enc(c.details)+"&location="+enc(c.loc);
+    var oUrl = "https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&allday=true&startdt="+c.startIso+"&enddt="+c.endExclIso+"&subject="+enc(c.title)+"&location="+enc(c.loc)+"&body="+enc(c.details);
+    var row = "display:block;width:100%;margin-top:10px;padding:13px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;text-decoration:none";
+    return '<div data-act="cal-close" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#1f3d2c;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 20px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="color:#faf6ec;font-size:17px;font-weight:800;text-align:center">Add to calendar</div>'+
+        '<div style="color:#a9bdab;font-size:12.5px;text-align:center;margin:5px 0 2px">'+esc(c.name)+' · '+esc(fmtDate(new Date(t.dateIn+"T00:00:00")))+' → '+esc(fmtDate(new Date(t.dateOut+"T00:00:00")))+'</div>'+
+        '<a href="'+gUrl+'" target="_blank" rel="noopener" class="tap" style="'+row+';background:#cf5a26;color:#fff">Google Calendar</a>'+
+        '<a href="'+oUrl+'" target="_blank" rel="noopener" class="tap" style="'+row+';background:#faf6ec;color:#1f3d2c">Outlook</a>'+
+        '<button class="tap" data-act="trip-ics" data-arg="'+t.id+'" style="'+row+';background:transparent;color:#faf6ec;border:1px solid rgba(255,255,255,.4)">Apple / download (.ics)</button>'+
+        '<button class="tap" data-act="cal-close" style="width:100%;margin-top:12px;color:#a9bdab;font-weight:700;font-size:13px;background:none">Close</button>'+
+      '</div></div>';
+  }
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
@@ -2967,7 +3010,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -3046,6 +3089,9 @@
       }
     }
     else if (act==="trip-remind"){ var tr=tripById(arg); if(tr){ downloadReminder(parkById(tr.parkId), tr.dateIn); } }
+    else if (act==="trip-cal"){ state.calTripId=arg; render(); }
+    else if (act==="trip-ics"){ var tci=tripById(arg); if(tci) downloadTripIcs(tci); }
+    else if (act==="cal-close"){ state.calTripId=null; render(); }
     else if (act==="trip-remove"){
       var trm=tripById(arg);
       var pnm = (trm && parkById(trm.parkId)) ? parkById(trm.parkId).name : "this trip";
