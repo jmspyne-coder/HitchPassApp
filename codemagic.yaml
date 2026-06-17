@@ -1,9 +1,6 @@
 # Codemagic CI — builds the Hitch Pass iOS app (Capacitor wrapper in /mobile)
-# Prereqs (in Codemagic UI before first successful publish):
-#   1. Apple Developer Program enrolled ($99/yr).
-#   2. App Store Connect API key added in Codemagic → Teams/Integrations → "HitchPass ASC API Key".
-#   3. Bundle ID "app.hitchpass.mobile" registered (Codemagic can auto-register with the API key).
-#   4. An app record created in App Store Connect for that bundle ID.
+# Signing: created automatically from the App Store Connect API key (Admin access),
+# so no manual certificate/profile setup is needed.
 workflows:
   ios-hitchpass:
     name: Hitch Pass iOS
@@ -12,9 +9,6 @@ workflows:
     integrations:
       app_store_connect: HitchPass ASC API Key
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: app.hitchpass.mobile
       vars:
         BUNDLE_ID: "app.hitchpass.mobile"
       node: 20
@@ -30,12 +24,16 @@ workflows:
           cd mobile
           npx cap add ios 2>/dev/null || true
           npx cap sync ios
-      - name: Set bundle id + version
+      - name: Initialize keychain
+        script: keychain initialize
+      - name: Create/fetch signing certificate + provisioning profile
         script: |
-          cd mobile/ios/App
-          # set marketing/build version from Codemagic's incrementing counter
-          agvtool new-version -all $(($BUILD_NUMBER + 1)) || true
-      - name: Set up code signing
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add signing certificate to keychain
+        script: keychain add-certificates
+      - name: Apply provisioning profiles to the Xcode project
         script: |
           cd mobile/ios/App
           xcode-project use-profiles
