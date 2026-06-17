@@ -2136,8 +2136,11 @@
   function bookingFormView(){
     var f = state.bookingForm;
     var editing = state.editingTripId != null;
-    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">'+(editing?"Edit trip":"Add a booking")+'</div>'+
-      '<div style="font-size:12.5px;color:'+C.muted+'">'+(editing?"Update the details of this trip":"Log a reservation you’ve already made")+'</div></div>';
+    var booked = f.markBooked;
+    var headTitle = booked ? "You’re booked! 🎉" : (editing ? "Edit trip" : "Add a booking");
+    var headSub = booked ? "Add your confirmation number below to finish." : (editing ? "Update the details of this trip" : "Log a reservation you’ve already made");
+    var head = '<div style="padding:16px 16px 6px"><div class="disp" style="font-size:24px;font-weight:800">'+headTitle+'</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+'">'+headSub+'</div></div>';
     var parkSection;
     if (!f.custom){
       var picked = f.parkId ? parkById(f.parkId) : null;
@@ -3280,7 +3283,20 @@
   try { var _inv = new URLSearchParams(location.search || "").get("invite"); if (_inv) localStorage.setItem("hp_invite", _inv.toLowerCase().trim()); } catch(e){}   // capture ?invite=CODE for the launch promo
   // When you return from the external Book-now site, offer to save the trip (park + dates pre-filled).
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState==="visible" && state.pendingBook && !state.bookReturnShow && (Date.now()-(state.pendingBook.ts||0) > 3000)){ state.bookReturnShow = true; render(); }
+    if (document.visibilityState !== "visible") return;
+    var pb = state.pendingBook;
+    if (!pb || state.bookReturnShow || (Date.now()-(pb.ts||0) <= 3000)) return;
+    var ex = pb.fromTripId ? tripById(pb.fromTripId) : null;
+    if (ex){
+      // Booked an existing trip → jump straight to its Edit form so you can add the confirmation #.
+      var p = ex.parkId ? parkById(ex.parkId) : null;
+      state.bookingForm = { parkQuery: p?p.name:(ex.parkName||""), parkId: ex.parkId||null, parkName: ex.parkName||"", network: ex.network||"", custom: !ex.parkId, dateIn: ex.dateIn||"", dateOut: ex.dateOut||"", confirmation: ex.confirmation||"", note: ex.note||"", error:"", markBooked:true };
+      state.editingTripId = ex.id; state.addBooking = true; state.tab = "trips"; state.pendingBook = null;
+      render();
+    } else {
+      // Booked from a park (no trip yet) → offer to create one.
+      state.bookReturnShow = true; render();
+    }
   });
   initAuth();   // restore any persisted Supabase session + reflect signed-in state (no-op if sb is null)
   var sp = document.getElementById("splash");
