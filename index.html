@@ -2065,7 +2065,12 @@
       '</div>'+
       (dateLine? '<div style="font-size:13px;font-weight:600;margin-top:9px;display:flex;align-items:center;gap:6px">'+ic("calendar",14,C.pine)+esc(dateLine)+'</div>':'')+
       bw + chipsRow + noteRow + stayWarn + actions +
-      ((t.dateIn&&t.dateOut)? '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="width:100%;margin-top:8px;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("calendar",14,C.pine)+'Add to calendar</button>':'')+
+      (function(){
+        var mapUrl = tripMapUrl(t), btns = "";
+        if (mapUrl) btns += '<a href="'+mapUrl+'" target="_blank" rel="noopener" class="tap" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">'+ic("pin",14,C.pine)+'Directions</a>';
+        if (t.dateIn&&t.dateOut) btns += '<button class="tap" data-act="trip-cal" data-arg="'+t.id+'" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(31,28,23,.18);color:'+C.pine+';font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("calendar",14,C.pine)+'Add to calendar</button>';
+        return btns ? '<div style="display:flex;gap:8px;margin-top:8px">'+btns+'</div>' : "";
+      })()+
       '</div>';
   }
 
@@ -2948,6 +2953,13 @@
       '</div></div>';
   }
 
+  /* Google Maps driving directions to a trip's park (precise lat/lng if mapped, else name search). */
+  function tripMapUrl(t){
+    var p = t.parkId ? parkById(t.parkId) : null;
+    if (p && p.lat!=null && p.lng!=null) return "https://www.google.com/maps/dir/?api=1&destination="+p.lat+","+p.lng;
+    var q = (p ? (p.name+" "+(p.city||"")+" "+(p.st||"")) : (t.parkName||"")).trim();
+    return q ? "https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(q) : "";
+  }
   /* ---- Add a trip to Google / Outlook / Apple calendars (all-day, spanning the stay) ---- */
   function tripCalData(t){
     var p = t.parkId ? parkById(t.parkId) : null;
