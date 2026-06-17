@@ -9,6 +9,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Hitch Pass" />
 <meta name="theme-color" content="#E8461E" />
+<!-- Google Analytics 4 (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-QFYJEMS67E"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-QFYJEMS67E');
+</script>
 <!-- Preconnect to external origins so auth/data/font/CDN connections open during first paint (faster cold load). -->
 <link rel="preconnect" href="https://rhqnsjnmlrshrifewxtr.supabase.co" crossorigin />
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -31,7 +39,7 @@
   ::-webkit-scrollbar{width:0;height:0;}
   .wrap{max-width:480px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;background:#ece5d6;}
   .content{flex:1;overflow-y:auto;}
-  .ribbon{background:#15110c;color:rgba(255,255,255,.82);font-size:12px;font-weight:600;line-height:1.4;padding:10px 16px;display:flex;gap:8px;align-items:flex-start;}
+  .ribbon{background:#15110c;color:rgba(255,255,255,.82);font-size:12px;font-weight:600;line-height:1.4;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;gap:8px;align-items:flex-start;}
   .footer{text-align:center;font-size:11.5px;font-weight:600;color:#867d6c;padding:10px 16px;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;}
   .nav{display:flex;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;padding-bottom:env(safe-area-inset-bottom);}
   .navBtn{flex:1;padding:9px 0 11px;display:flex;flex-direction:column;align-items:center;gap:3px;color:#867d6c;font-size:10.5px;font-weight:600;}
@@ -2201,7 +2209,12 @@
     var rows = Object.keys(NETWORKS).filter(function(key){ return !NETWORKS[key].displayOnly; }).map(function(key){
       var n = NETWORKS[key];
       var label = n.memLabel ? esc(n.memLabel) : (esc(n.short)+" member #");
-      return inputRow("data-member", key, label, "text", members[key], "Member number");
+      var row = inputRow("data-member", key, label, "text", members[key], "Member number");
+      // Thousand Trails also needs a booking PIN — store it right under the TT number.
+      if (key === "tt"){
+        row += inputRow("data-member", "tt_pin", "Thousand Trails PIN", "text", members["tt_pin"], "PIN — needed to book");
+      }
+      return row;
     }).join("");
     return '<div class="det">'+
       '<div class="dlabel" style="font-size:12px">Membership numbers</div>'+
