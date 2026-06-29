@@ -2353,6 +2353,12 @@
     if (typeof location !== "undefined" && /[?&]checkout=success/.test(location.search || "")){
       startCheckoutConfirm();
     }
+    // Returning from a successful tip: show a brief thank-you, mark the cadence, and strip the param.
+    if (typeof location !== "undefined" && /[?&]tip=thanks/.test(location.search || "")){
+      state.tipToast = true; tipBooted = true; markTipShown();
+      try { history.replaceState({}, "", location.pathname); } catch(e){}
+      setTimeout(function(){ state.tipToast = false; render(); }, 4000);
+    }
   }
   /* Reads the user's subscription row (RLS = own row only) and derives isPro. Drives the badge AND the gates. */
   function refreshSubscription(){
@@ -2390,6 +2396,7 @@
           state.account.subStatus = null;
         }
         if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
+        maybeShowTip();                          // Tip jar: raise the 14-day prompt once entitlement is known
         render();
       });
     }).catch(function(){});
@@ -3019,6 +3026,80 @@
       '</div></div>';
   }
 
+  /* ---- Tip jar (one-time donations) ----
+     A friendly "support this project" prompt shown at most once every 14 days to BOTH Free and Pro.
+     The cadence lives in its own localStorage key. The tip is mode:payment in /api/tip — it never
+     creates a subscriptions row, so a tip can't be confused for a Pro grant. */
+  var TIP_KEY = "hitchpass.tipLastShown";
+  var TIP_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
+  function tipDue(){
+    try { var last = parseInt(localStorage.getItem(TIP_KEY) || "0", 10);
+      return !(last > 0) || (Date.now() - last) >= TIP_INTERVAL_MS; } catch(e){ return true; }
+  }
+  function markTipShown(){ try { localStorage.setItem(TIP_KEY, String(Date.now())); } catch(e){} }
+  var tipBooted = false;   // once per page load
+  /* Raise the prompt once entitlement is known and the main app is visible — never over the front
+     door, the onboarding plan choice, the post-checkout confirm screen, or a thank-you toast. */
+  function maybeShowTip(){
+    if (tipBooted) return;
+    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout || state.tipToast) return;
+    if (!tipDue()){ tipBooted = true; return; }
+    tipBooted = true; state.tipPrompt = true; render();
+  }
+  /* POST the chosen amount (cents) to /api/tip and redirect to Stripe Checkout. Sends the auth token
+     when signed in (cleaner receipt); the server validates and bounds the amount regardless. */
+  function sendTip(cents){
+    if (state.tipBusy) return;
+    state.tipBusy = true; state.tipError = ""; render();
+    var a = state.account;
+    var headers = { "Content-Type": "application/json" };
+    if (a && a.session && a.session.access_token) headers.Authorization = "Bearer " + a.session.access_token;
+    fetch("/api/tip", { method: "POST", headers: headers, body: JSON.stringify({ amount: cents }) })
+      .then(function(r){ return r.json(); }).then(function(d){
+        if (d && d.url){ markTipShown(); window.location.href = d.url; }
+        else { state.tipBusy = false; state.tipError = (d && d.error) || "Couldn’t start the tip. Please try again."; render(); }
+      }).catch(function(){ state.tipBusy = false; state.tipError = "Couldn’t start the tip. Please try again."; render(); });
+  }
+  function dismissTip(){ state.tipPrompt = false; state.tipCustomOpen = false; markTipShown(); render(); }
+  /* The tip prompt overlay. Presets + a Custom inline input ($1–$500). Inner card is data-act="noop"
+     so taps inside reach their own buttons without bubbling to the backdrop’s dismiss. */
+  function tipPromptHTML(){
+    if (!state.tipPrompt) return "";
+    var busy = !!state.tipBusy;
+    var presets = [[200,"$2"],[500,"$5"],[1000,"$10"],[2000,"$20"]];
+    var presetBtns = presets.map(function(p){
+      return '<button class="tap" data-act="tip-amount" data-arg="'+p[0]+'"'+(busy?" disabled":"")+
+        ' style="flex:1;min-width:62px;padding:12px 0;border-radius:11px;background:'+C.pine+';color:#f3ead9;font-weight:800;font-size:15px">'+p[1]+'</button>';
+    }).join("");
+    var customBtn = '<button class="tap" data-act="tip-custom"'+(busy?" disabled":"")+
+      ' style="flex:1;min-width:62px;padding:12px 0;border-radius:11px;border:1px solid rgba(31,61,44,.4);background:#fff;color:'+C.pine+';font-weight:800;font-size:14px">Custom</button>';
+    var customBlock = state.tipCustomOpen
+      ? '<div style="display:flex;gap:8px;margin-top:10px">'+
+          '<input id="tipcustom" type="number" min="1" max="500" step="1" inputmode="decimal" placeholder="Amount in $ (1–500)" '+
+            'style="flex:1;padding:11px 12px;border-radius:11px;border:1px solid rgba(31,28,23,.25);font-size:15px" />'+
+          '<button class="tap" data-act="tip-custom-submit"'+(busy?" disabled":"")+
+            ' style="padding:11px 16px;border-radius:11px;background:'+C.ember+';color:#fff;font-weight:800;font-size:14px">'+(busy?"…":"Send")+'</button>'+
+        '</div>'
+      : "";
+    var err = state.tipError ? '<div style="color:'+C.clay+';font-size:12px;font-weight:600;margin-top:10px;text-align:center">'+esc(state.tipError)+'</div>' : "";
+    return '<div data-act="tip-bg" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:62;'+
+      'display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#fff;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 18px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="font-size:18px;font-weight:800;color:'+C.ink+';display:flex;align-items:center;gap:8px">☕ Enjoying Hitch Pass?</div>'+
+        '<div style="font-size:13px;color:'+C.muted+';margin-top:9px;line-height:1.55">I built this to make my own RV life easier and shared it because I figured others could use it too. If it’s been useful, a tip helps keep it running.</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:15px">'+presetBtns+customBtn+'</div>'+
+        customBlock + err +
+        '<button class="tap" data-act="tip-dismiss" style="margin-top:14px;width:100%;color:'+C.muted+';font-weight:700;font-size:13px;background:none;padding:6px">No thanks</button>'+
+      '</div></div>';
+  }
+  /* Brief thank-you toast after a successful tip (shown when returning with ?tip=thanks). Auto-dismisses. */
+  function tipToastHTML(){
+    if (!state.tipToast) return "";
+    return '<div data-act="tip-toast-close" style="position:fixed;left:0;right:0;bottom:74px;z-index:64;display:flex;justify-content:center;padding:0 18px">'+
+      '<div style="background:'+C.pine+';color:#f3ead9;border-radius:13px;padding:12px 18px;font-size:13.5px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.32)">Thanks for the support! 🙌</div>'+
+      '</div>';
+  }
+
   /* Google Maps driving directions to a trip's park (precise lat/lng if mapped, else name search). */
   function tripMapUrl(t){
     var p = t.parkId ? parkById(t.parkId) : null;
@@ -3128,7 +3209,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -3177,6 +3258,16 @@
     else if (act==="copynum"){ if(!isPro()){ openUpgrade("copy"); return; } var pp2=parkById(state.selected); var nm=pp2 && state.profile.members[pp2.network]; if(nm && navigator.clipboard){ navigator.clipboard.writeText(nm); alert("Copied: "+nm); } }
     else if (act==="go-pro"){ openUpgrade(arg||true); }
     else if (act==="upsell-close"){ state.upsell=null; render(); }
+    else if (act==="tip-amount"){ var tc=parseInt(arg,10); if (tc>0) sendTip(tc); }
+    else if (act==="tip-custom"){ state.tipCustomOpen=true; state.tipError=""; render(); }
+    else if (act==="tip-custom-submit"){
+      var inp=document.getElementById("tipcustom");
+      var dollars=inp?Number(inp.value):NaN;
+      if (!isFinite(dollars) || dollars<1 || dollars>500){ state.tipError="Enter an amount between $1 and $500."; render(); return; }
+      sendTip(Math.round(dollars*100));
+    }
+    else if (act==="tip-dismiss" || act==="tip-bg"){ dismissTip(); }
+    else if (act==="tip-toast-close"){ state.tipToast=false; render(); }
     else if (act==="addtrip"){
       var pk=parkById(state.selected);
       if (!pk) return;
