@@ -74,12 +74,27 @@ module.exports = async (req, res) => {
       var s = event.data.object;
       var uid = await userIdForCustomer(s.customer);
       if (uid) {
+        var deleted = event.type === "customer.subscription.deleted";
+        // Race guard: `customer.subscription.created` (and sometimes `.updated`) fires with the
+        // transient `incomplete` status BEFORE the first invoice is paid. Persisting it would
+        // overwrite the `active` row that checkout.session.completed / confirm-checkout already
+        // wrote. So for non-delete events, fetch the LIVE subscription from Stripe and trust that
+        // status; if it's a transient `incomplete*` state, skip the write entirely.
+        var status = deleted ? "canceled" : s.status;
+        var liveSub = s;
+        if (!deleted) {
+          try { liveSub = await stripe.subscriptions.retrieve(s.id); status = liveSub.status; }
+          catch (e) { /* fall back to the event payload status */ }
+          if (status === "incomplete" || status === "incomplete_expired") {
+            res.status(200).json({ received: true, skipped: "transient_status" }); return;
+          }
+        }
         await upsert({
           user_id: uid,
-          status: event.type === "customer.subscription.deleted" ? "canceled" : s.status,
+          status: status,
           stripe_customer_id: s.customer,
           stripe_subscription_id: s.id,
-          current_period_end: periodEnd(s)
+          current_period_end: periodEnd(deleted ? s : liveSub)
         });
       }
     }
