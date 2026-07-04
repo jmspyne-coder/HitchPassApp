@@ -96,7 +96,7 @@
 
   var NETWORKS = {
     tt:  { short:"TT",       name:"Thousand Trails",            count:82,   tier:"included",   price:"Free with pass",     window:180, maxStay:21, url:"https://newbook.thousandtrails.com/", memLabel:"Thousand Trails #", color:"#2f6b46" },
-    enc: { short:"Encore",   name:"Trails Collection · Encore", count:72,   tier:"discounted", price:"$20 / night",        window:90,  maxStay:21, url:"https://newbook.thousandtrails.com/", memLabel:"Encore #", color:"#cf5a26" },
+    enc: { short:"Encore",   name:"Trails Collection · Encore", count:72,   tier:"discounted", price:"$20 / night",        window:60,  maxStay:14, url:"https://newbook.thousandtrails.com/", memLabel:"Encore #", color:"#cf5a26" },
     dc:  { short:"DC",       name:"Destination Campgrounds",    count:76,   tier:"discounted", price:"$20 / night",        window:90,  maxStay:21, url:"https://newbook.thousandtrails.com/", color:"#3f7cac", displayOnly:true, accessVia:"enc" },
     rpi: { short:"RPI",      name:"Resort Parks Intl",          count:312,  tier:"discounted", price:"~$10 / night",       window:90,  maxStay:14, url:"https://resortparks.com", memLabel:"RPI member number", color:"#7b3fb0" },
     c2c: { short:"C2C",      name:"Coast to Coast",             count:709,  tier:"confirm",    price:"Confirm access",     window:90,  maxStay:14, url:"https://coastresorts.com", memLabel:"Coast to Coast #", color:"#d4a017" },
@@ -1601,6 +1601,19 @@
   }
   function parkById(id){ for (var i=0;i<PARKS.length;i++){ if (PARKS[i].id===id) return PARKS[i]; } return null; }
   function fmtDate(d){ return d.toLocaleDateString(undefined,{ weekday:"short", month:"short", day:"numeric" }); }
+  function isoDate(d){ function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
+  /* Build the network's reserve URL. For the Thousand Trails NewBook portal, deep-link the
+     chosen dates via NewBook's documented available_from / available_to params so members don't
+     re-enter dates on the booking site. Unknown/invalid params are ignored by NewBook, so this
+     degrades safely; non-NewBook networks get their plain URL. Park prefill is not possible
+     without per-park NewBook IDs, which we don't hold. */
+  function reserveUrl(network, dIn, dOut){
+    var base = (NETWORKS[network] && NETWORKS[network].url) || "";
+    if (base.indexOf("newbook") !== -1 && dIn){
+      base += (base.indexOf("?")!==-1 ? "&" : "?") + "available_from=" + encodeURIComponent(dIn) + (dOut ? "&available_to=" + encodeURIComponent(dOut) : "");
+    }
+    return base;
+  }
   function nightsBetween(a,b){ if(!a||!b) return 0; return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
   function todayLocalStr(){ var d=new Date(); function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
   /* Single place that knows TT is tier-driven. Returns the resolved booking
@@ -1968,8 +1981,19 @@
       }
     }
     var stayWarn = overStay
-      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) exceed '+esc(net.short)+'’s '+eb.maxDaysIn+'-night max stay.</div>'
+      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:6px;color:'+C.clay+';font-size:12.5px;font-weight:600">'+ic("alert",14,C.clay)+'These dates ('+nights+' nights) run past '+esc(net.short)+'’s '+eb.maxDaysIn+'-night max. You can still save it — TT can sometimes extend on request.</div>'
       : "";
+    // Proactive max-stay map: show the latest checkout for the chosen arrival, with a one-tap "use max".
+    var stayMap = "";
+    if (isPro() && eb.maxDaysIn>0 && arrival){
+      var maxOut = new Date(arrival.getTime() + eb.maxDaysIn*86400000);
+      var maxOutISO = isoDate(maxOut);
+      var moveNote = eb.tierAware ? (eb.parkToPark ? ', then move park-to-park' : (eb.daysOut ? ', then '+eb.daysOut+' nights out' : '')) : '';
+      stayMap = '<div style="margin-top:10px;background:rgba(31,28,23,.04);border:1px solid rgba(31,28,23,.10);border-radius:12px;padding:11px 13px">'+
+        '<div style="font-size:12.5px;color:'+C.muted+';line-height:1.5"><b style="color:#1C1C1A">Max stay '+eb.maxDaysIn+' nights'+moveNote+'.</b> Latest checkout for a '+fmtDate(arrival)+' arrival is <b style="color:#1C1C1A">'+fmtDate(maxOut)+'</b>.</div>'+
+        (state.dates.out===maxOutISO ? '' : '<button class="tap" data-act="usemax" data-arg="'+maxOutISO+'" style="margin-top:8px;font-size:12.5px;font-weight:700;color:'+C.ember+'">Use max checkout →</button>')+
+        '</div>';
+    }
     if (!isPro()){ bw = ""; stayWarn = ""; }   // Pro-only: booking-window + max-stay alerts (Fix 4 surface 2). Free sees dates only.
     // Hard guard (live): departure must be after arrival. Blocks Add (handled in the addtrip action).
     var dateErr = (state.dates.in && state.dates.out && nights<1)
@@ -1989,7 +2013,7 @@
         '<div style="flex:1"><div class="dlabel">Arrival</div><input class="dinput" type="date" data-date="in" value="'+esc(state.dates.in)+'" /></div>'+
         '<div style="flex:1"><div class="dlabel">Departure</div><input class="dinput" type="date" data-date="out" value="'+esc(state.dates.out)+'" /></div>'+
       '</div>'+
-      bw + stayWarn + dateErr + memBlock +
+      stayMap + bw + stayWarn + dateErr + memBlock +
       '<button class="btnG tap" data-act="addtrip" style="margin-top:14px">'+ic("calendar",15,"#faf6ec")+'Add to my trips</button>'+
       '<button class="btnO tap" data-act="reserve" style="margin-top:10px">Reserve on '+esc(net.short)+' '+ic("ext",13,C.pine)+'</button>'+
       '<a href="https://www.google.com/search?q='+encodeURIComponent(p.name+" "+(p.city||"")+" "+(p.st||"")+" campground")+'" target="_blank" rel="noopener" class="tap" style="margin-top:10px;width:100%;padding:11px;border-radius:11px;border:1px solid rgba(31,28,23,.25);color:#1f3d2c;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">Find online (phone, hours, site) '+ic("ext",13,C.pine)+'</a>'+
@@ -3242,8 +3266,9 @@
       var pl=document.getElementById("plist"); if(pl){ pl.innerHTML=listHTML(); pl.scrollIntoView({block:"start"}); } else render();
     }
     else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
-    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ state.pendingBook={ fromTripId:null, parkId:pp.id, parkName:null, network:pp.network, dateIn:(state.dates&&state.dates.in)||"", dateOut:(state.dates&&state.dates.out)||"", ts:Date.now() }; window.open(NETWORKS[pp.network].url,"_blank"); } }
-    else if (act==="book-now-trip"){ var bt=tripById(arg); if(bt){ var bnet=NETWORKS[bt.network]; state.pendingBook={ fromTripId:bt.id, parkId:bt.parkId||null, parkName:bt.parkName||null, network:bt.network, dateIn:bt.dateIn||"", dateOut:bt.dateOut||"", ts:Date.now() }; if(bnet&&bnet.url) window.open(bnet.url,"_blank"); } }
+    else if (act==="usemax"){ if(arg){ state.dates.out = arg; render(); } }
+    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ var rIn=(state.dates&&state.dates.in)||"", rOut=(state.dates&&state.dates.out)||""; state.pendingBook={ fromTripId:null, parkId:pp.id, parkName:null, network:pp.network, dateIn:rIn, dateOut:rOut, ts:Date.now() }; window.open(reserveUrl(pp.network, rIn, rOut),"_blank"); } }
+    else if (act==="book-now-trip"){ var bt=tripById(arg); if(bt){ var bnet=NETWORKS[bt.network]; state.pendingBook={ fromTripId:bt.id, parkId:bt.parkId||null, parkName:bt.parkName||null, network:bt.network, dateIn:bt.dateIn||"", dateOut:bt.dateOut||"", ts:Date.now() }; if(bnet&&bnet.url) window.open(reserveUrl(bt.network, bt.dateIn||"", bt.dateOut||""),"_blank"); } }
     else if (act==="book-return-dismiss"){ state.bookReturnShow=false; state.pendingBook=null; render(); }
     else if (act==="book-save-trip"){
       var pb=state.pendingBook;
