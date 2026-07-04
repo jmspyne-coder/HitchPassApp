@@ -1602,17 +1602,27 @@
   function parkById(id){ for (var i=0;i<PARKS.length;i++){ if (PARKS[i].id===id) return PARKS[i]; } return null; }
   function fmtDate(d){ return d.toLocaleDateString(undefined,{ weekday:"short", month:"short", day:"numeric" }); }
   function isoDate(d){ function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
-  /* Build the network's reserve URL. For the Thousand Trails NewBook portal, deep-link the
-     chosen dates via NewBook's documented available_from / available_to params so members don't
-     re-enter dates on the booking site. Unknown/invalid params are ignored by NewBook, so this
-     degrades safely; non-NewBook networks get their plain URL. Park prefill is not possible
-     without per-park NewBook IDs, which we don't hold. */
-  function reserveUrl(network, dIn, dOut){
-    var base = (NETWORKS[network] && NETWORKS[network].url) || "";
-    if (base.indexOf("newbook") !== -1 && dIn){
-      base += (base.indexOf("?")!==-1 ? "&" : "?") + "available_from=" + encodeURIComponent(dIn) + (dOut ? "&available_to=" + encodeURIComponent(dOut) : "");
+  /* Lightweight transient toast, bottom-center, auto-dismiss. */
+  function toast(msg){
+    try {
+      var t = document.getElementById("hpToast");
+      if (!t){ t = document.createElement("div"); t.id = "hpToast";
+        t.style.cssText = "position:fixed;left:50%;bottom:88px;transform:translateX(-50%);max-width:88%;background:#15110c;color:#f3eddd;font-size:13px;font-weight:600;line-height:1.35;padding:11px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.28);z-index:9999;text-align:center;opacity:0;transition:opacity .2s";
+        document.body.appendChild(t); }
+      t.textContent = msg; t.style.opacity = "1";
+      clearTimeout(t._h); t._h = setTimeout(function(){ t.style.opacity = "0"; }, 3600);
+    } catch(e){}
+  }
+  /* Booking hand-off. The TT portal is a custom, cross-origin search page that ignores URL date
+     params and can't be scripted from here, so we can't prefill or auto-fill its fields. Best we
+     can do: copy the park name to the clipboard so the member pastes it into the location search
+     in one tap (on iOS the keyboard surfaces a one-tap Paste chip). Then open the network site. */
+  function bookingHandoff(parkName, network){
+    var url = (NETWORKS[network] && NETWORKS[network].url) || "";
+    if (parkName && navigator.clipboard){
+      try { navigator.clipboard.writeText(parkName); toast("Copied “" + parkName + "” — paste it into the search box on the next screen"); } catch(e){}
     }
-    return base;
+    if (url) window.open(url, "_blank");
   }
   function nightsBetween(a,b){ if(!a||!b) return 0; return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
   function todayLocalStr(){ var d=new Date(); function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
@@ -3267,8 +3277,8 @@
     }
     else if (act==="remind"){ downloadReminder(parkById(state.selected), state.dates.in); }
     else if (act==="usemax"){ if(arg){ state.dates.out = arg; render(); } }
-    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ var rIn=(state.dates&&state.dates.in)||"", rOut=(state.dates&&state.dates.out)||""; state.pendingBook={ fromTripId:null, parkId:pp.id, parkName:null, network:pp.network, dateIn:rIn, dateOut:rOut, ts:Date.now() }; window.open(reserveUrl(pp.network, rIn, rOut),"_blank"); } }
-    else if (act==="book-now-trip"){ var bt=tripById(arg); if(bt){ var bnet=NETWORKS[bt.network]; state.pendingBook={ fromTripId:bt.id, parkId:bt.parkId||null, parkName:bt.parkName||null, network:bt.network, dateIn:bt.dateIn||"", dateOut:bt.dateOut||"", ts:Date.now() }; if(bnet&&bnet.url) window.open(reserveUrl(bt.network, bt.dateIn||"", bt.dateOut||""),"_blank"); } }
+    else if (act==="reserve"){ var pp=parkById(state.selected); if(pp){ state.pendingBook={ fromTripId:null, parkId:pp.id, parkName:null, network:pp.network, dateIn:(state.dates&&state.dates.in)||"", dateOut:(state.dates&&state.dates.out)||"", ts:Date.now() }; bookingHandoff(pp.name, pp.network); } }
+    else if (act==="book-now-trip"){ var bt=tripById(arg); if(bt){ var btp=bt.parkId?parkById(bt.parkId):null; var bpn=(btp&&btp.name)||bt.parkName||""; state.pendingBook={ fromTripId:bt.id, parkId:bt.parkId||null, parkName:bt.parkName||null, network:bt.network, dateIn:bt.dateIn||"", dateOut:bt.dateOut||"", ts:Date.now() }; bookingHandoff(bpn, bt.network); } }
     else if (act==="book-return-dismiss"){ state.bookReturnShow=false; state.pendingBook=null; render(); }
     else if (act==="book-save-trip"){
       var pb=state.pendingBook;
