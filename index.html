@@ -1506,6 +1506,25 @@
   var PARK_NET_COUNT = (function(){ var m={}; PARKS.forEach(function(p){ m[p.network]=(m[p.network]||0)+1; }); return m; })();
   function isMembershipNet(id){ var n=NETWORKS[id]; return !!(n && n.cardOnly) || !(PARK_NET_COUNT[id]>0); }
 
+  /* Live park data (externalized — see /pipeline). The inline PARKS above is the offline / first-load
+     fallback; when parks.data.json is reachable it REPLACES the data in place (same array reference, so
+     every closure over PARKS sees it) and the app re-renders. A missing, empty, or malformed file is
+     ignored and the inline fallback stands, so this can only ever add freshness, never break the app.
+     parks.data.json is a generated artifact (MotherDuck hitchpass.parks_staging); this array is never
+     hand-edited for a data refresh again. Park ids are stable across regenerations so saved trips resolve. */
+  (function loadLiveParks(){
+    try {
+      fetch("parks.data.json").then(function(r){ return r.ok ? r.json() : null; }).then(function(arr){
+        if (!Array.isArray(arr) || arr.length < 100) return;   // real dataset is ~1200+; never trust a stub/truncated file
+        for (var i=0;i<arr.length;i++){ var p=arr[i];
+          if (p==null || typeof p.id==="undefined" || !p.name || !p.network) return; }   // any bad row -> keep fallback wholesale
+        PARKS.length = 0; Array.prototype.push.apply(PARKS, arr);
+        PARK_NET_COUNT = (function(){ var m={}; PARKS.forEach(function(p){ m[p.network]=(m[p.network]||0)+1; }); return m; })();
+        if (typeof render === "function") render();
+      }).catch(function(){});
+    } catch(e){}
+  })();
+
   var KEY = "hitchpass.v1";
   function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
   function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }

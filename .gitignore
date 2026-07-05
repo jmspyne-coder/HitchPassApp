@@ -1,3 +1,7 @@
 .vercel
 
 node_modules
+
+# Pipeline working dir (scraped JSON, geocode cache, generated artifact, gate report)
+pipeline/_staged/
+__pycache__/

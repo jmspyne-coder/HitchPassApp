@@ -1,0 +1,53 @@
+name: parks-refresh
+
+# AUTONOMY SWITCH IS OFF.
+# Trigger is manual dispatch only. The weekly schedule below is intentionally commented out and the
+# run is DRY: it refreshes hitchpass.parks_staging and generates the app data file to an ARTIFACT,
+# but never overwrites the committed parks.data.json and never commits or pushes. Going live is two
+# deliberate manual steps documented in pipeline/README.md.
+
+on:
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "0 9 * * 1"   # Mondays 09:00 UTC — park data barely moves; weekly is plenty. Enable at go-live.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parks-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Run pipeline (DRY RUN — writes MotherDuck staging + artifact, never the committed file)
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          DRY_RUN: "1"
+        run: |
+          if [ -z "${MOTHERDUCK_TOKEN}" ]; then
+            echo "::error::MOTHERDUCK_TOKEN secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          python pipeline/run_pipeline.py
+
+      - name: Upload regenerated data + gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parks-refresh-${{ github.run_number }}
+          path: |
+            pipeline/_staged/parks.data.json
+            pipeline/_staged/report.json
+          if-no-files-found: warn
