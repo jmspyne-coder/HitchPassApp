@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v14";
+var CACHE = "hitchpass-v15";
 
 /* Same-origin shell — must all cache or install fails (these always exist).
    Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */
@@ -56,6 +56,19 @@ self.addEventListener("fetch", function(e){
       }).catch(function(){
         return caches.match("./index.html").then(function(r){ return r || caches.match("./"); });
       })
+    );
+    return;
+  }
+
+  /* Live park data: network-first so a refreshed parks.data.json reaches users on the next online load;
+     fall back to the cached copy when offline. Without this, the cache-first rule below would pin the
+     first-fetched copy until a cache-version bump, defeating the self-refreshing pipeline. */
+  if (/\/parks\.data\.json(\?|$)/.test(req.url)){
+    e.respondWith(
+      fetch(req).then(function(res){
+        if (res && res.ok){ var copy = res.clone(); caches.open(CACHE).then(function(c){ c.put(req, copy); }).catch(function(){}); }
+        return res;
+      }).catch(function(){ return caches.match(req); })
     );
     return;
   }

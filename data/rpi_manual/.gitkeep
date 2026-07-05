@@ -1,0 +1,3 @@
+# Drop the newest RPI member-guide export here (CSV or JSON). Newest file wins.
+# RPI is NEVER crawled (resortparks.com robots: Disallow: /). This is the only RPI refresh path.
+# Expected columns (CSV) or keys (JSON): name, city, state[, lat, lng, source_url].
