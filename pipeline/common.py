@@ -12,6 +12,20 @@ import time
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
+# Fuller browser-like headers. Datacenter IPs (GitHub runners) get bot-challenged, so present as a
+# real browser navigation to reduce intermittent 403s. A block still isn't fatal (the orchestrator
+# carries that network forward), this just makes it rarer.
+BROWSER_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+}
+
 # Continental North America bounds — any coordinate outside these is rejected as impossible.
 LAT_MIN, LAT_MAX = 14.0, 72.0
 LNG_MIN, LNG_MAX = -170.0, -50.0

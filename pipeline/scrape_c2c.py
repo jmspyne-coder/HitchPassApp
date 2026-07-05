@@ -75,7 +75,7 @@ def parse_state(html, st):
 
 def main():
     sess = requests.Session()
-    sess.headers["User-Agent"] = common.UA
+    sess.headers.update(common.BROWSER_HEADERS)
     codes = state_codes(sess)
     print(f"C2C: enumerating {len(codes)} states")
     all_rows = []
