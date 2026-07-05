@@ -48,6 +48,26 @@ def counts(rows):
     return by
 
 
+def seed_staging_if_empty(con, now_iso):
+    """First run on a fresh MotherDuck account: initialize hitchpass.parks_staging from the committed
+    parks.data.json so all coordinates (including RPI, which is never scraped) are present and the sanity
+    gates pass without a manual migration. Also a disaster-recovery path if staging is ever lost. No-op
+    once staging has rows."""
+    import export_app_data as export
+    con.execute("""CREATE TABLE IF NOT EXISTS hitchpass.parks_staging (
+        name TEXT, city TEXT, state TEXT, network TEXT, brand TEXT,
+        lat DOUBLE, lng DOUBLE, source_url TEXT, scraped_at TIMESTAMP, geo_source TEXT)""")
+    if con.execute("SELECT count(*) FROM hitchpass.parks_staging").fetchone()[0]:
+        return 0
+    prior = export.load_prior(COMMITTED)
+    if not prior:
+        return 0
+    tuples = [(p["name"], p.get("city"), p.get("st"), p["network"], None,
+               p.get("lat"), p.get("lng"), None, now_iso, "seed") for p in prior]
+    con.executemany("INSERT INTO hitchpass.parks_staging VALUES (?,?,?,?,?,?,?,?,?,?)", tuples)
+    return len(tuples)
+
+
 def main():
     os.makedirs(STAGED, exist_ok=True)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -62,8 +82,11 @@ def main():
         r["scraped_at"] = now_iso
     scraped_rows = els + c2c + (rpi or [])
 
-    # 4. connect + snapshot last-known-good
+    # 4. connect; bootstrap an empty staging from the committed file, then snapshot last-known-good
     con = common.connect()
+    seeded = seed_staging_if_empty(con, now_iso)
+    if seeded:
+        print(f"bootstrap: seeded {seeded} rows into empty parks_staging from committed parks.data.json")
     existing = load_existing(con)
     lkg_counts, lkg_total = counts(existing), len(existing)
     print("last-known-good:", lkg_counts, "total", lkg_total)
