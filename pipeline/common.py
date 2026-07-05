@@ -33,7 +33,9 @@ def connect():
     import duckdb
     con = duckdb.connect(f"md:?motherduck_token={token()}")
     dbs = [r[0] for r in con.execute("SHOW DATABASES").fetchall()]
-    risky = [d for d in dbs if d.lower() in ("my_db", "odoo_crm", "sample_data")
+    # Flag only genuine Rootwork/cross-tenant databases. MotherDuck seeds every new account with a
+    # harmless `sample_data` demo db, so a clean Hitch-Pass-only account must NOT trip the guard.
+    risky = [d for d in dbs if d.lower() in ("my_db", "odoo_crm")
              or "rootwork" in d.lower() or "rems" in d.lower()]
     if risky and os.environ.get("HITCHPASS_ALLOW_SHARED_ACCOUNT") != "1":
         print("\n*** HALT - DATA SEPARATION ***")
