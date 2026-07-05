@@ -101,7 +101,7 @@ def dedupe(rows):
 
 def main():
     sess = requests.Session()
-    sess.headers["User-Agent"] = common.UA
+    sess.headers.update(common.BROWSER_HEADERS)
     html = common.polite_get(sess, SOURCE_URL)
     rows = dedupe(parse(html))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

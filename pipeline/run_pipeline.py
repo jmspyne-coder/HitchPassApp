@@ -68,19 +68,40 @@ def seed_staging_if_empty(con, now_iso):
     return len(tuples)
 
 
+def safe_scrape(fn, label):
+    """Run a scraper/ingest; a failure (e.g. an HTTP 403 bot-block) is logged and returned as None so
+    the orchestrator carries that network forward instead of crashing the whole refresh."""
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN: {label} source failed ({e}); carrying forward existing rows for it")
+        return None
+
+
 def main():
     os.makedirs(STAGED, exist_ok=True)
     now_iso = datetime.now(timezone.utc).isoformat()
     print(f"=== parks-refresh (DRY_RUN={DRY_RUN}) {now_iso} ===")
 
-    # 1-3. gather scraped/ingested rows
-    els = scrape_els.main()
-    c2c = scrape_c2c.main()
-    rpi = ingest_rpi.main()
-    scraped_networks = ["tt", "enc", "dc", "c2c"] + (["rpi"] if rpi else [])
-    for r in els + c2c + (rpi or []):
+    # 1-3. gather scraped/ingested rows. A source that 403-blocks or errors is NON-FATAL: that network
+    # is carried forward from existing staging and the run still produces a valid artifact. Sites bot-
+    # challenge GitHub's datacenter IPs intermittently, so one bad fetch must not fail the whole refresh.
+    els = safe_scrape(scrape_els.main, "els (tt/enc/dc)")
+    c2c = safe_scrape(scrape_c2c.main, "c2c")
+    rpi = safe_scrape(ingest_rpi.main, "rpi")
+    scraped_networks = []
+    if els:
+        scraped_networks += ["tt", "enc", "dc"]
+    if c2c:
+        scraped_networks += ["c2c"]
+    if rpi:
+        scraped_networks += ["rpi"]
+    scraped_rows = (els or []) + (c2c or []) + (rpi or [])
+    for r in scraped_rows:
         r["scraped_at"] = now_iso
-    scraped_rows = els + c2c + (rpi or [])
+    skipped = [n for n in ("tt", "enc", "dc", "c2c") if n not in scraped_networks]
+    if skipped:
+        print(f"NOTE: source unavailable this run; carried forward from existing: {skipped}")
 
     # 4. connect; bootstrap an empty staging from the committed file, then snapshot last-known-good
     con = common.connect()
@@ -101,6 +122,7 @@ def main():
     # 6. sanity gates
     ok, failures, stats = sanity_gates.check_gates(candidate, lkg_counts, lkg_total)
     report = {"generated_at": now_iso, "dry_run": DRY_RUN, "scraped_networks": scraped_networks,
+              "carried_forward_networks": skipped,
               "last_known_good": {"counts": lkg_counts, "total": lkg_total},
               "candidate_stats": stats, "geocode": {"filled": filled, "flagged": flagged},
               "gates_passed": ok, "gate_failures": failures}
