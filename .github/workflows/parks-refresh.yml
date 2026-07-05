@@ -35,6 +35,11 @@ jobs:
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
           DRY_RUN: "1"
+          # The token is a shared MotherDuck account (also sees my_db/odoo_crm). The pipeline still
+          # writes ONLY to `hitchpass` (USE hitchpass + active-db assertion); this flag acknowledges
+          # the shared account so the data-separation guard proceeds. A Hitch-Pass-only token would
+          # let this be removed.
+          HITCHPASS_ALLOW_SHARED_ACCOUNT: "1"
         run: |
           if [ -z "${MOTHERDUCK_TOKEN}" ]; then
             echo "::error::MOTHERDUCK_TOKEN secret is not set. Add it under Settings → Secrets and variables → Actions."
