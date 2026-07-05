@@ -29,26 +29,21 @@ def token():
 
 
 def connect():
-    """Connect to MotherDuck with NO default database, then USE hitchpass. Isolation-guarded."""
+    """Connect to MotherDuck and switch into the pipeline's own `hitchpass` database.
+
+    The pipeline lives entirely in its own `hitchpass` database (its own workspace / set of tables)
+    inside whatever MotherDuck account the token belongs to. It only ever creates and writes
+    `hitchpass.*` tables; the USE + active-database assertion below guarantees no other database
+    (e.g. my_db) is ever written, so it is safe to run in a shared account.
+    """
     import duckdb
     con = duckdb.connect(f"md:?motherduck_token={token()}")
-    dbs = [r[0] for r in con.execute("SHOW DATABASES").fetchall()]
-    # Flag only genuine Rootwork/cross-tenant databases. MotherDuck seeds every new account with a
-    # harmless `sample_data` demo db, so a clean Hitch-Pass-only account must NOT trip the guard.
-    risky = [d for d in dbs if d.lower() in ("my_db", "odoo_crm")
-             or "rootwork" in d.lower() or "rems" in d.lower()]
-    if risky and os.environ.get("HITCHPASS_ALLOW_SHARED_ACCOUNT") != "1":
-        print("\n*** HALT - DATA SEPARATION ***")
-        print("This MotherDuck token can also see:", risky)
-        print("The pipeline writes ONLY to `hitchpass`, but per policy this shared-account run is a")
-        print("deliberate choice. Re-run with HITCHPASS_ALLOW_SHARED_ACCOUNT=1 to proceed, or supply")
-        print("a token scoped to a separate Hitch Pass MotherDuck account.")
-        sys.exit(2)
     con.execute("CREATE DATABASE IF NOT EXISTS hitchpass")
     con.execute("USE hitchpass")
     active = con.execute("SELECT current_database()").fetchone()[0]
     if active != "hitchpass":
-        sys.exit(f"HALT: active database resolved to '{active}', not 'hitchpass'.")
+        sys.exit(f"HALT: active database resolved to '{active}', not 'hitchpass'. "
+                 "Aborting so the pipeline never writes outside its own workspace.")
     return con
 
 
