@@ -7,6 +7,20 @@ legally separate from Rootwork Energy. Derived from the `hitch-pass` skill in cl
 reconciled against the live repo, July 3, 2026 — if this file and a session directive conflict,
 the directive wins; flag the conflict so both get patched.
 
+## Acquisition posture (North star) — added 2026-07-05
+
+Hitch Pass is **build-to-be-acquired**, not just monetized. Restated 2026-07-05: the target is
+an exit to an ELS-level acquirer, and the core asset is the multi-network geocoded parks database
+(~939+ parks across Thousand Trails, Encore, Trails Collection, Coast to Coast, and RPI), networks
+that do not interoperate and cannot cheaply rebuild this. Raw user count is a weak anchor; the
+database plus engagement evidence is the moat. Revenue is signal, not the goal.
+
+North star, in priority order: database depth/coverage/quality, then the pipeline that maintains
+it, then user base and engagement evidence, then feature surface. Never polish the feature surface
+while the first three have open gaps. Canonical production domain stays `hitch-pass-app.vercel.app`
+(a 2026-07-05 register item proposed flipping it to `hitchpass.vercel.app`; that was backwards and
+is not applied).
+
 ## Product facts
 
 - Name is **Hitch Pass** (two words). "TrailHopper" is only the Asana project name — never
@@ -37,14 +51,24 @@ the directive wins; flag the conflict so both get patched.
 - Full-screen login front door (replaced the legacy "hitch" passcode gate) → Free/Pro
   plan-choice screen → app.
 
-## Product direction (decided 2026-06-29, still current)
+## Product direction (updated 2026-07-07, supersedes 2026-06-29)
 
-The Free tier stays **freemium**: limited features but data persists and **no ads**. A "demo
-mode" that wipes the wallet each session, plus in-app ads, was proposed in a monetization
-directive and **rejected** by Jim. Reason: don't degrade a working free experience to chase early
-income. Grow via outreach instead. The tip jar (one-time donation via `/api/tip`, shown once per
-14 days) fits this: it asks, it doesn't punish. The `?invite=CODE` launch comps stay. **Don't
-re-propose demo-mode or ads** unless Jim reverses this in a session directive.
+Strategy: free app, ad-supported, grow user base for potential acquisition by ELS (Thousand
+Trails parent). No Pro tier, no subscription gating, no restrictive free tier. All features
+available to all users for free.
+
+- **AdSense:** approved in principle, pending Google account approval. A public landing page
+  (`landing.html`) was built to satisfy AdSense's crawlable-content requirement. AdSense
+  containers will be added in a future directive once the pub-ID is issued.
+- **Tip jar:** stays as-is (one-time donations, 14-day cadence).
+- **Share prompt:** 7-day cadence overlay encouraging users to share the app. Offset from
+  tip jar so they never stack.
+- **Pro tier / Stripe checkout:** dormant. The checkout flow, serverless functions, and
+  Supabase subscriptions table remain in the codebase but are not exposed in UI. Do not
+  remove — may be reactivated if strategy changes. Plan-choice screen still shows on
+  onboarding; leave as-is for now (future directive may remove it).
+- **Growth channels:** organic Facebook posting, Reddit, SEO landing page, in-app share
+  mechanic. Paid ads may follow once AdSense revenue offsets cost.
 
 ## Known bugs / open work
 
@@ -53,12 +77,13 @@ re-propose demo-mode or ads** unless Jim reverses this in a session directive.
   `confirm-checkout.js`, which reconciles Stripe→Supabase synchronously before the app reads
   entitlement. Treat the raw webhook ordering as still fragile — any webhook change must address
   or explicitly preserve-and-note this race.
-- **SUPERSEDED — restrictive-free-tier monetization spec:** a spec proposing Free = demo mode
+- **SHELVED — restrictive-free-tier monetization spec:** a spec proposing Free = demo mode
   (no cross-session persistence), a persistent upgrade banner, a blurred Perks tab with Pro
-  badge, AdSense containers for Free users, and killing the giveaway path was written but is
-  **superseded by the 2026-06-29 freemium decision above**. Do not implement without an explicit
-  new directive from Jim reversing that decision. Honor the 11 existing beta "Pro" accounts
-  regardless.
+  badge, and killing the giveaway path is **permanently shelved**. The 2026-07-07 direction
+  (free, ad-supported, no gating — see Product direction above) settles this: the restrictive
+  free tier is not coming back. Note the split from AdSense: the shelved spec gated Free users
+  behind ads-plus-limits; the current plan runs ads across a fully free app with no limits. The
+  11 existing beta "Pro" accounts are honored regardless.
 
 ## QA harness
 
@@ -80,6 +105,58 @@ ZIP `42424`.
 - Product corrections from Jim are immediate redirects — implement, don't re-litigate.
 - Keep Hitch Pass and Rootwork fully separate (entities, accounts, branding). If Rootwork's
   EIN is found on any Hitch Pass service account, flag it as a cleanup item.
+
+## Transferability Standard (added 2026-07-05)
+
+Hitch Pass must be handoff-ready: a competent acquirer IT team should run it without Jim by end
+of week one. Transfer friction is deal friction and prices directly into any deal. Test every
+build decision against "does this make the handoff harder?" (Origin: AA World Services acquiring
+the Everything AA app and immediately changing its features. Acquirers modify what they buy.)
+
+Standing rules:
+
+1. **Substrate over surface.** Priority: (a) parks database depth/coverage/quality, (b) the
+   pipeline that maintains it, (c) user base and engagement evidence, (d) feature surface, in
+   that order. Acquirers keep a through c and rebuild d. Never polish d while a through c have gaps.
+2. **Feature-flag anything an acquirer would change.** Monetization gating, ads, tier limits,
+   branding are config flags, never hard-coded logic. Governs monetization work regardless of the
+   free-tier decision.
+3. **Boring stack is a protected asset.** Vanilla JS + Supabase + Vercel + Stripe, precisely
+   because any competent IT team can absorb it. Sophistication goes in the data, not the code.
+4. **Docs ship with code.** Every directive touching Hitch Pass updates the Transfer Packet as an
+   in-scope step, not a follow-up.
+5. **No founder-in-the-loop dependencies.** Nothing operational may require Jim's personal
+   accounts, memory, or manual intervention. Where it does, log it as transfer debt.
+
+The Transfer Packet (lives in the HitchPass Drive folder; the artifact a buyer's IT lead reads):
+
+- Architecture one-pager: stack, data flow, hosting, auth, payments.
+- Runbook: deploy, rollback, env vars, secrets inventory, account handoff (Vercel, Supabase
+  `rhqnsjnmlrshrifewxtr`, Stripe, domain `hitch-pass-app.vercel.app`).
+- Data dictionary: parks database schema, sources, update pipeline, quality notes.
+- Cost-to-operate sheet: every service, tier, monthly cost.
+- Admin guide: user management, subscription states, webhook behavior, known issues.
+- Transfer-debt log: anything founder-dependent, with remediation notes.
+
+Acceptance test: a competent IT generalist with no prior context can deploy from scratch and
+answer "what breaks if X goes down" from the packet alone.
+
+## Posting Campaign Protocol (added 2026-07-05)
+
+Organic outreach runs as a repeatable protocol, not one-off posts. Three rounds have run
+(9 groups logged). Tracker: Google Drive sheet `1FsijZGfK4lxZWUKTp5ZvgNuTalYsGaRwwWzlPV-lPOw`.
+Any session can run a round from this section plus the tracker.
+
+Rules per round:
+
+1. Variant E is the canonical post copy.
+2. Link goes in the first comment, never the post body.
+3. Canary rule: post to one group first, wait for the engagement pass before continuing.
+4. Space groups 15 to 20 minutes apart.
+5. Run a per-group duplicate scan before posting (never repeat a logged group).
+6. Log each group to the tracker with an engagement-pass approval before the next.
+7. Read each group's own rules first (see GROWTH.md channel notes and the not-affiliated
+   disclaimer).
 
 ---
 

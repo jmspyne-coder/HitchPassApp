@@ -42,7 +42,7 @@
   .ribbon{background:#15110c;color:rgba(255,255,255,.82);font-size:12px;font-weight:600;line-height:1.4;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;gap:8px;align-items:flex-start;}
   .footer{text-align:center;font-size:11.5px;font-weight:600;color:#867d6c;padding:10px 16px;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;}
   .nav{display:flex;border-top:1px solid rgba(31,28,23,.10);background:#faf6ec;padding-bottom:env(safe-area-inset-bottom);}
-  .navBtn{flex:1;padding:9px 0 11px;display:flex;flex-direction:column;align-items:center;gap:3px;color:#867d6c;font-size:10.5px;font-weight:600;}
+  .navBtn{flex:1;padding:7px 0 9px;display:flex;flex-direction:column;align-items:center;gap:2px;color:#867d6c;font-size:9.5px;font-weight:600;}
   .navBtn.on{color:#cf5a26;font-weight:700;}
   .hero{background:#1f3d2c;padding:22px 18px 26px;border-bottom-left-radius:22px;border-bottom-right-radius:22px;}
   .chip{background:rgba(255,255,255,.12);color:#f3ead9;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;}
@@ -1553,7 +1553,9 @@
     exploreMode: "list",
     explorePage: 1,
     perksExpanded: {},   // Perks Section A: which feature rows are expanded (by index)
-    perksCompare: false  // Perks Section C: full 4-tier matrix open/closed
+    perksCompare: false, // Perks Section C: full 4-tier matrix open/closed
+    tipPrompt: false,    // tip jar overlay open
+    sharePrompt: false   // share prompt overlay open (7-day cadence, offset from the tip jar)
   };
   var mapInstance = null;   // active Leaflet map (Explore → Map); torn down each render
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
@@ -1700,7 +1702,7 @@
   /* ---- views ---- */
   var NAV = [
     ["home","Home","home"],["explore","Explore","compass"],["trips","Trips","calendar"],
-    ["refer","Refer","userplus"],["profile","Profile","user"],["perks","Perks","sparkles"]
+    ["refer","Refer","userplus"],["share","Share","share"],["profile","Profile","user"],["perks","Perks","sparkles"]
   ];
 
   function homeView(){
@@ -2945,6 +2947,46 @@
       '</div>';
   }
 
+  /* Share tab — the in-app growth surface. Pine hero, a prominent share button wired to the same
+     shareApp() the nav share icon uses, plain-prose sharing tips, and an aspirational leaderboard
+     placeholder (no backend). Bottom link points at the public landing page. */
+  function shareTabView(){
+    var landingURL = prodURL().replace(/\/index\.html$/,"").replace(/\/$/,"") + "/landing.html";
+    var head =
+      '<div class="hero" style="margin-bottom:14px">'+
+        '<div class="disp" style="color:#faf6ec;font-size:26px;font-weight:800;line-height:1.1">Spread the Word</div>'+
+        '<div style="color:#a9bdab;font-size:13.5px;line-height:1.55;margin-top:9px">Hitch Pass is free and built by a fellow RVer. The best way to help is to share it with someone at your campground.</div>'+
+      '</div>';
+    var shareCard =
+      '<div style="padding:0 16px">'+
+        '<div class="tile" style="align-items:stretch">'+
+          '<div style="font-size:16px;font-weight:800;color:'+C.ink+'">Share Hitch Pass</div>'+
+          '<div style="font-size:13px;color:'+C.muted+';line-height:1.5;margin-top:-6px">Send the link to anyone who books RV stays — it opens your phone’s share sheet.</div>'+
+          '<button class="btnP tap" data-act="share" style="margin-top:2px">'+ic("share",15,"#fff")+'Share Hitch Pass</button>'+
+        '</div>'+
+      '</div>';
+    var tipsCard =
+      '<div style="padding:14px 16px 0">'+
+        '<div class="tile">'+
+          '<div style="font-size:15px;font-weight:800;color:'+C.ink+'">How to share</div>'+
+          '<div style="font-size:13px;color:'+C.muted+';line-height:1.6;margin-top:-6px">Show it to your campground neighbor. Text the link to your RV group chat. Post it in your favorite RV Facebook group.</div>'+
+        '</div>'+
+      '</div>';
+    var leaderCard =
+      '<div style="padding:14px 16px 0">'+
+        '<div class="tile" style="background:#f4efe4;border-style:dashed">'+
+          '<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;color:'+C.muted+'">'+ic("sparkles",17,C.muted)+'Campfire Leaderboard</div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';line-height:1.55;margin-top:-6px">Coming soon — see how many Hitch Pass users are at your campground.</div>'+
+        '</div>'+
+      '</div>';
+    var landingLink =
+      '<div style="padding:16px 16px 24px;text-align:center">'+
+        '<div style="font-size:12px;color:'+C.muted+';line-height:1.5">Share this link instead:<br>'+
+          '<a href="'+esc(landingURL)+'" target="_blank" rel="noopener" style="color:'+C.ember+';font-weight:700">'+esc(landingURL.replace(/^https?:\/\//,""))+'</a></div>'+
+      '</div>';
+    return head + shareCard + tipsCard + leaderCard + landingLink;
+  }
+
   function navView(){
     return '<div class="nav">'+NAV.map(function(n){
       var on = (state.tab===n[0] || (n[0]==="explore" && state.tab==="explore")) ? " on" : "";
@@ -3091,12 +3133,33 @@
   }
   function markTipShown(){ try { localStorage.setItem(TIP_KEY, String(Date.now())); } catch(e){} }
   var tipBooted = false;   // once per page load
-  /* Raise the prompt once entitlement is known and the main app is visible — never over the front
-     door, the onboarding plan choice, the post-checkout confirm screen, or a thank-you toast. */
+
+  /* ---- Share prompt: 7-day cadence, offset from the tip jar so the two never stack ---- */
+  var SHARE_KEY = "hitchpass.shareLastShown";
+  var SHARE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+  function shareDue(){
+    try { var last = parseInt(localStorage.getItem(SHARE_KEY) || "0", 10);
+      return !(last > 0) || (Date.now() - last) >= SHARE_INTERVAL_MS; } catch(e){ return true; }
+  }
+  function markShareShown(){ try { localStorage.setItem(SHARE_KEY, String(Date.now())); } catch(e){} }
+  var shareBooted = false;
+  /* Raise the share prompt only when the tip prompt is NOT taking the stage. Same entry gates as the
+     tip jar, plus a hard rule to never overlap the tip prompt or its thank-you toast. */
+  function maybeShowShare(){
+    if (shareBooted) return;
+    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout) return;
+    if (state.tipPrompt || state.tipToast) return;   // never stack on the tip jar
+    if (!shareDue()){ shareBooted = true; return; }
+    shareBooted = true; state.sharePrompt = true; render();
+  }
+
+  /* Raise the tip prompt once entitlement is known and the main app is visible — never over the front
+     door, the onboarding plan choice, the post-checkout confirm screen, or a thank-you toast. When the
+     tip prompt is NOT shown (already shown this load, or not due), hand off to the share prompt. */
   function maybeShowTip(){
-    if (tipBooted) return;
+    if (tipBooted){ maybeShowShare(); return; }
     if (!signedIn() || !hasChosenPlan() || state.confirmCheckout || state.tipToast) return;
-    if (!tipDue()){ tipBooted = true; return; }
+    if (!tipDue()){ tipBooted = true; maybeShowShare(); return; }
     tipBooted = true; state.tipPrompt = true; render();
   }
   /* POST the chosen amount (cents) to /api/tip and redirect to Stripe Checkout. Sends the auth token
@@ -3113,7 +3176,12 @@
         else { state.tipBusy = false; state.tipError = (d && d.error) || "Couldn’t start the tip. Please try again."; render(); }
       }).catch(function(){ state.tipBusy = false; state.tipError = "Couldn’t start the tip. Please try again."; render(); });
   }
-  function dismissTip(){ state.tipPrompt = false; state.tipCustomOpen = false; markTipShown(); render(); }
+  function dismissTip(){
+    state.tipPrompt = false; state.tipCustomOpen = false; markTipShown(); render();
+    // If share is also due, let it follow after a short beat so the two don't flash together.
+    if (shareDue()) setTimeout(maybeShowShare, 500);
+  }
+  function dismissShare(){ state.sharePrompt = false; markShareShown(); render(); }
   /* The tip prompt overlay. Presets + a Custom inline input ($1–$500). Inner card is data-act="noop"
      so taps inside reach their own buttons without bubbling to the backdrop’s dismiss. */
   function tipPromptHTML(){
@@ -3151,6 +3219,19 @@
     return '<div data-act="tip-toast-close" style="position:fixed;left:0;right:0;bottom:74px;z-index:64;display:flex;justify-content:center;padding:0 18px">'+
       '<div style="background:'+C.pine+';color:#f3ead9;border-radius:13px;padding:12px 18px;font-size:13.5px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.32)">Thanks for the support! 🙌</div>'+
       '</div>';
+  }
+  /* Share prompt overlay — same bottom-sheet pattern as the tip jar. Inner card is data-act="noop"
+     so taps inside reach their own buttons without bubbling to the backdrop's dismiss. */
+  function sharePromptHTML(){
+    if (!state.sharePrompt) return "";
+    return '<div data-act="share-prompt-bg" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:62;'+
+      'display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#fff;border-radius:18px;max-width:360px;width:100%;padding:22px 20px 18px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        '<div style="font-size:18px;font-weight:800;color:'+C.ink+';display:flex;align-items:center;gap:8px">🏕️ Know someone who’d use this?</div>'+
+        '<div style="font-size:13px;color:'+C.muted+';margin-top:9px;line-height:1.55">Hitch Pass is free and grows by word of mouth. If it’s been useful, share it with a campground neighbor or your RV group.</div>'+
+        '<button class="tap" data-act="share-prompt-send" style="margin-top:16px;width:100%;padding:13px;border-radius:12px;background:'+C.ember+';color:#fff;font-weight:800;font-size:15px">Share Hitch Pass</button>'+
+        '<button class="tap" data-act="share-prompt-dismiss" style="margin-top:12px;width:100%;color:'+C.muted+';font-weight:700;font-size:13px;background:none;padding:6px">Not now</button>'+
+      '</div></div>';
   }
 
   /* Google Maps driving directions to a trip's park (precise lat/lng if mapped, else name search). */
@@ -3254,6 +3335,7 @@
     else if (state.tab==="tools"){ body = toolsView(); }
     else if (state.tab==="trips"){ body = tripsView(); }
     else if (state.tab==="refer"){ body = referView(); }
+    else if (state.tab==="share"){ body = shareTabView(); }
     else if (state.tab==="profile"){ body = profileView(); }
     else if (state.tab==="perks"){ body = perksView(); }
     else { body = homeView(); }
@@ -3262,7 +3344,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML() + sharePromptHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -3322,6 +3404,8 @@
     }
     else if (act==="tip-dismiss" || act==="tip-bg"){ dismissTip(); }
     else if (act==="tip-toast-close"){ state.tipToast=false; render(); }
+    else if (act==="share-prompt-bg" || act==="share-prompt-dismiss"){ dismissShare(); }
+    else if (act==="share-prompt-send"){ shareApp(); dismissShare(); }
     else if (act==="addtrip"){
       var pk=parkById(state.selected);
       if (!pk) return;
