@@ -51,7 +51,8 @@ Stripe redirect URLs in `api/*` still reference the old alias and were intention
   `updated_at`). Client computes `isPro`/entitlement from the subscriptions row, re-checked on
   focus and via realtime.
 - Stripe. Serverless functions handle checkout + webhooks.
-- Service worker versioned (`hitchpass-v12` as of July 3, 2026) — BUMP the cache version on any
+- Service worker versioned (`hitchpass-v20` as of July 10, 2026; version lives in `sw.js`, not
+  index.html) — BUMP the cache version on any
   cache-relevant change or users get stale builds.
 - Full-screen login front door (replaced the legacy "hitch" passcode gate) → Free/Pro
   plan-choice screen → app.
