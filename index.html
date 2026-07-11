@@ -3018,6 +3018,24 @@
   var KEY = "hitchpass.v1";
   function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
   function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }
+
+  /* ---- Feature flags (Go-Free pivot, 2026-07-10) ----
+     Hitch Pass is fully free: no plan gate, no feature gating, no paid checkout. Per the
+     Transferability Standard, monetization is feature-flagged OFF, never deleted — an acquirer
+     flips these back on to restore the freemium build. Nothing below is torn out.
+       SHOW_PLAN_CHOICE      false -> skip the Free/Pro onboarding screen; land straight in the app
+       ENABLE_STRIPE_CHECKOUT false -> isPro() is always true, no subscribe CTA, /api/create-checkout never called
+       SHOW_DONATION_PROMPT  true  -> keep the voluntary Stripe tip jar (mode:payment, never a Pro grant)
+       SHOW_ADS              false -> reserved; ads are not implemented */
+  var FEATURES = {
+    SHOW_PLAN_CHOICE: false,
+    ENABLE_STRIPE_CHECKOUT: false,
+    SHOW_DONATION_PROMPT: true,
+    SHOW_ADS: false
+  };
+  /* Voluntary "support Hitch Pass" link (Profile footnote). Placeholder until Jim supplies the real page. */
+  var DONATE_URL = "https://buymeacoffee.com/hitchpass";
+
   var saved = load();
   var state = {
     tab: "home",
@@ -3824,8 +3842,11 @@
   /* ---- Auth flow (email OTP code). All async; re-render on completion. Never throws if sb is null. ---- */
   var subChannel = null;   // Supabase realtime channel on this user's subscriptions row
   /* THE invariant (spec Fix 3): isPro is the single source of truth for entitlement. It is derived
-     only from the subscriptions row (active/trialing + not expired) — never from hp_plan_choice. */
-  function isPro(){ return !!state.isPaid; }
+     only from the subscriptions row (active/trialing + not expired) — never from hp_plan_choice.
+     Go-Free (2026-07-10): with ENABLE_STRIPE_CHECKOUT off, every user is entitled to every feature,
+     so isPro() resolves true for all — unconditionally, before any surface renders. The state.isPaid
+     read below is preserved intact so flipping ENABLE_STRIPE_CHECKOUT back on restores real gating. */
+  function isPro(){ return FEATURES.ENABLE_STRIPE_CHECKOUT ? !!state.isPaid : true; }
   /* Safe GA4 event helper — conversion tracking for Google/Facebook ads (no-op if gtag is blocked). */
   function track(name, params){ try { if (window.gtag) window.gtag("event", name, params || {}); } catch(e){} }
   /* ---- Web Push: booking-window alerts (installed PWA / Android / desktop; not the TestFlight build) ---- */
@@ -4025,6 +4046,7 @@
   }
   function authSubscribe(plan){
     var a = state.account;
+    if (!FEATURES.ENABLE_STRIPE_CHECKOUT){ return; }   // Go-Free: paid checkout is off — never hit /api/create-checkout
     if (IS_IOS_APP){ return; }   // in-app purchases disabled on iOS (App Store 3.1.1) — upgrade on the web
     if (!sb || !a.session){ a.error = "Sign in first to subscribe."; render(); return; }
     a.busy = true; a.error = ""; a.payUnavailable = false; render();
@@ -4054,6 +4076,7 @@
   /* "Has this user chosen a plan?" — paid (active sub) OR a per-user local free flag. */
   function planKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_plan_choice:" + u.id) : null; }
   function hasChosenPlan(){
+    if (!FEATURES.SHOW_PLAN_CHOICE) return true;   // Go-Free: no plan gate — everyone is "in" the moment they sign in
     if (state.isPaid) return true;
     var k = planKey(); if (!k) return false;
     try { return localStorage.getItem(k) === "free"; } catch (e) { return false; }
@@ -4095,18 +4118,34 @@
     }
     var err = a.error ? '<div style="margin-top:10px;color:'+C.clay+';font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px">'+ic("alert",14,C.clay)+esc(a.error)+'</div>' : "";
     if (a.session && a.session.user){
+      // Go-Free: no Free/Pro badge distinction for regular users. The "Active" badge stays only for the
+      // legacy giveaway accounts (state.isPaid) so they can still find manage/cancel; a re-enabled checkout
+      // brings the full badge back. The voluntary "buy me a coffee" footnote lives here, in Profile.
+      var showBadge = state.isPaid || FEATURES.ENABLE_STRIPE_CHECKOUT;
       var planLabel = state.isPaid ? "Active" : "Free";
       var planColor = state.isPaid ? C.green : C.muted;
-      var planBadge = '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>';
+      var planBadge = showBadge ? '<span style="font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;background:'+planColor+'">'+planLabel+'</span>' : '';
       var payNote = a.payUnavailable ? '<div style="font-size:11.5px;color:'+C.clay+';font-weight:600;margin-top:8px;line-height:1.5">Payments aren’t live yet — try again shortly.</div>' : "";
-      var subBlock = state.isPaid
-        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Thanks for going Pro. Your plan is active — all Pro features are unlocked.</div>'+
+      var donateBlock = FEATURES.SHOW_DONATION_PROMPT
+        ? '<div style="font-size:12px;color:'+C.muted+';margin-top:12px;line-height:1.5">Hitch Pass is free and stays that way. If it saves you time, you can '+
+            '<a href="'+DONATE_URL+'" target="_blank" rel="noopener" style="color:'+C.green+';font-weight:700;text-decoration:underline">buy me a coffee ☕</a> — completely optional.</div>'
+        : "";
+      var subBlock;
+      if (state.isPaid){
+        // Legacy giveaway account: keep self-serve manage/cancel so they retain control of the comped sub.
+        subBlock = '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Every feature is unlocked. Hitch Pass is free for everyone now — no plan needed.</div>'+
           '<button class="btnO tap" data-act="manage-sub" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Opening…":"Manage / cancel subscription")+'</button>'+
-          '<div style="font-size:11px;color:'+C.muted+';margin-top:7px;line-height:1.5">Opens Stripe’s secure portal to cancel, change plan, update your card, or view invoices. Cancel takes effect at the end of your paid period.</div>'
-        : '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to unlock unlimited trips, booking-window &amp; max-stay alerts, member-number copy, the Payback calculator, Coverage-near-a-prospect, and Perks.</div>'+
+          '<div style="font-size:11px;color:'+C.muted+';margin-top:7px;line-height:1.5">Opens Stripe’s secure portal to cancel, update your card, or view invoices.</div>'+ donateBlock;
+      } else if (FEATURES.ENABLE_STRIPE_CHECKOUT){
+        // Preserved freemium path — only reachable if an acquirer flips ENABLE_STRIPE_CHECKOUT back on.
+        subBlock = '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">Upgrade to Pro to unlock unlimited trips, booking-window &amp; max-stay alerts, member-number copy, the Payback calculator, Coverage-near-a-prospect, and Perks.</div>'+
           (IS_IOS_APP ? webUpgradeNote()
             : '<button class="btnG tap" data-act="auth-subscribe" data-arg="annual" style="margin-top:10px"'+(a.busy?" disabled":"")+'>'+(a.busy?"Starting…":"Upgrade to Pro · $54/yr ($4.50/mo)")+'</button>'+
               '<button class="btnO tap" data-act="auth-subscribe" data-arg="monthly" style="margin-top:8px"'+(a.busy?" disabled":"")+'>Upgrade · $6.50/mo</button>'+ payNote);
+      } else {
+        // Go-Free default: no upsell, no paywall — just confirmation everything is open, plus the tip footnote.
+        subBlock = '<div style="font-size:12px;color:'+C.muted+';margin-top:6px;line-height:1.5">You’re all set — every feature is unlocked. Hitch Pass is free. Always. No plans, no upgrades, no ads.</div>'+ donateBlock;
+      }
       return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px">'+
           '<div style="font-size:13.5px">Signed in as <b>'+esc(a.session.user.email||"")+'</b></div>'+planBadge+
@@ -4661,6 +4700,7 @@
      door, the onboarding plan choice, the post-checkout confirm screen, or a thank-you toast. When the
      tip prompt is NOT shown (already shown this load, or not due), hand off to the share prompt. */
   function maybeShowTip(){
+    if (!FEATURES.SHOW_DONATION_PROMPT){ tipBooted = true; maybeShowShare(); return; }   // donation prompt off -> hand straight to the share prompt
     if (tipBooted){ maybeShowShare(); return; }
     if (!signedIn() || !hasChosenPlan() || state.confirmCheckout || state.tipToast) return;
     if (!tipDue()){ tipBooted = true; maybeShowShare(); return; }
@@ -4832,7 +4872,7 @@
     if (sb && !state.authChecked){ app.innerHTML = authLoadingView(); return; }
     if (sb && state.authChecked && !signedIn()){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
     if (sb && state.authChecked && signedIn() && state.confirmCheckout && !state.isPaid){ app.innerHTML = confirmingView(); return; }   // post-checkout: confirming Pro before falling back to plan page
-    if (sb && state.authChecked && signedIn() && !hasChosenPlan()){ app.innerHTML = planChoiceView(); return; }   // one-time onboarding choice
+    if (FEATURES.SHOW_PLAN_CHOICE && sb && state.authChecked && signedIn() && !hasChosenPlan()){ app.innerHTML = planChoiceView(); return; }   // one-time onboarding choice (flag OFF in Go-Free: routes straight to the app)
     var body;
     if (state.tab==="explore"){ body = state.selected ? detailView() : exploreView(); }
     else if (state.tab==="home"){ body = homeView(); }
