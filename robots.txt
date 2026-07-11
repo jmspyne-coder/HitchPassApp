@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hitch-pass-app.vercel.app/sitemap.xml
+Sitemap: https://hitchpass.vercel.app/sitemap.xml

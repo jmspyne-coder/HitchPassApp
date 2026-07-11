@@ -10,6 +10,7 @@ never commits or pushes. Set DRY_RUN=0 only from the go-live step that also adds
 
 Exit codes: 0 ok; 1 sanity gate failure (nothing written to the app file); 2 data-separation halt.
 """
+
 import json
 import os
 import sys
@@ -17,13 +18,13 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import common          # noqa: E402
-import scrape_els      # noqa: E402
-import scrape_c2c      # noqa: E402
-import ingest_rpi      # noqa: E402
-import geocode         # noqa: E402
-import upsert          # noqa: E402
-import sanity_gates    # noqa: E402
+import common  # noqa: E402
+import scrape_els  # noqa: E402
+import scrape_c2c  # noqa: E402
+import ingest_rpi  # noqa: E402
+import geocode  # noqa: E402
+import upsert  # noqa: E402
+import sanity_gates  # noqa: E402
 import export_app_data as export  # noqa: E402
 
 STAGED = os.path.join(HERE, "_staged")
@@ -34,10 +35,23 @@ DRY_RUN = os.environ.get("DRY_RUN", "1") != "0"
 
 
 def load_existing(con):
-    rows = con.execute("""SELECT name, city, state, network, brand, lat, lng, source_url,
+    rows = con.execute(
+        """SELECT name, city, state, network, brand, lat, lng, source_url,
                                  CAST(scraped_at AS VARCHAR), geo_source
-                          FROM hitchpass.parks_staging""").fetchall()
-    cols = ["name", "city", "state", "network", "brand", "lat", "lng", "source_url", "scraped_at", "geo_source"]
+                          FROM hitchpass.parks_staging"""
+    ).fetchall()
+    cols = [
+        "name",
+        "city",
+        "state",
+        "network",
+        "brand",
+        "lat",
+        "lng",
+        "source_url",
+        "scraped_at",
+        "geo_source",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -54,27 +68,48 @@ def seed_staging_if_empty(con, now_iso):
     gates pass without a manual migration. Also a disaster-recovery path if staging is ever lost. No-op
     once staging has rows."""
     import export_app_data as export
-    con.execute("""CREATE TABLE IF NOT EXISTS hitchpass.parks_staging (
+
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS hitchpass.parks_staging (
         name TEXT, city TEXT, state TEXT, network TEXT, brand TEXT,
-        lat DOUBLE, lng DOUBLE, source_url TEXT, scraped_at TIMESTAMP, geo_source TEXT)""")
+        lat DOUBLE, lng DOUBLE, source_url TEXT, scraped_at TIMESTAMP, geo_source TEXT)"""
+    )
     if con.execute("SELECT count(*) FROM hitchpass.parks_staging").fetchone()[0]:
         return 0
     prior = export.load_prior(COMMITTED)
     if not prior:
         return 0
-    tuples = [(p["name"], p.get("city"), p.get("st"), p["network"], None,
-               p.get("lat"), p.get("lng"), None, now_iso, "seed") for p in prior]
-    con.executemany("INSERT INTO hitchpass.parks_staging VALUES (?,?,?,?,?,?,?,?,?,?)", tuples)
+    tuples = [
+        (
+            p["name"],
+            p.get("city"),
+            p.get("st"),
+            p["network"],
+            None,
+            p.get("lat"),
+            p.get("lng"),
+            None,
+            now_iso,
+            "seed",
+        )
+        for p in prior
+    ]
+    con.executemany(
+        "INSERT INTO hitchpass.parks_staging VALUES (?,?,?,?,?,?,?,?,?,?)", tuples
+    )
     return len(tuples)
 
 
 def safe_scrape(fn, label):
     """Run a scraper/ingest; a failure (e.g. an HTTP 403 bot-block) is logged and returned as None so
-    the orchestrator carries that network forward instead of crashing the whole refresh."""
+    the orchestrator carries that network forward instead of crashing the whole refresh.
+    """
     try:
         return fn()
     except Exception as e:  # noqa: BLE001
-        print(f"WARN: {label} source failed ({e}); carrying forward existing rows for it")
+        print(
+            f"WARN: {label} source failed ({e}); carrying forward existing rows for it"
+        )
         return None
 
 
@@ -88,26 +123,38 @@ def main():
     # challenge GitHub's datacenter IPs intermittently, so one bad fetch must not fail the whole refresh.
     els = safe_scrape(scrape_els.main, "els (tt/enc/dc)")
     c2c = safe_scrape(scrape_c2c.main, "c2c")
+    pa = safe_scrape(scrape_pa.main, "pa")
+    koa = safe_scrape(scrape_koa.main, "koa")
     rpi = safe_scrape(ingest_rpi.main, "rpi")
     scraped_networks = []
     if els:
         scraped_networks += ["tt", "enc", "dc"]
     if c2c:
         scraped_networks += ["c2c"]
+    if pa:
+        scraped_networks += ["pa"]
+    if koa:
+        scraped_networks += ["koa"]
     if rpi:
         scraped_networks += ["rpi"]
-    scraped_rows = (els or []) + (c2c or []) + (rpi or [])
+    scraped_rows = (els or []) + (c2c or []) + (pa or []) + (koa or []) + (rpi or [])
     for r in scraped_rows:
         r["scraped_at"] = now_iso
-    skipped = [n for n in ("tt", "enc", "dc", "c2c") if n not in scraped_networks]
+    skipped = [
+        n for n in ("tt", "enc", "dc", "c2c", "pa", "koa") if n not in scraped_networks
+    ]
     if skipped:
-        print(f"NOTE: source unavailable this run; carried forward from existing: {skipped}")
+        print(
+            f"NOTE: source unavailable this run; carried forward from existing: {skipped}"
+        )
 
     # 4. connect; bootstrap an empty staging from the committed file, then snapshot last-known-good
     con = common.connect()
     seeded = seed_staging_if_empty(con, now_iso)
     if seeded:
-        print(f"bootstrap: seeded {seeded} rows into empty parks_staging from committed parks.data.json")
+        print(
+            f"bootstrap: seeded {seeded} rows into empty parks_staging from committed parks.data.json"
+        )
     existing = load_existing(con)
     lkg_counts, lkg_total = counts(existing), len(existing)
     print("last-known-good:", lkg_counts, "total", lkg_total)
@@ -121,11 +168,17 @@ def main():
 
     # 6. sanity gates
     ok, failures, stats = sanity_gates.check_gates(candidate, lkg_counts, lkg_total)
-    report = {"generated_at": now_iso, "dry_run": DRY_RUN, "scraped_networks": scraped_networks,
-              "carried_forward_networks": skipped,
-              "last_known_good": {"counts": lkg_counts, "total": lkg_total},
-              "candidate_stats": stats, "geocode": {"filled": filled, "flagged": flagged},
-              "gates_passed": ok, "gate_failures": failures}
+    report = {
+        "generated_at": now_iso,
+        "dry_run": DRY_RUN,
+        "scraped_networks": scraped_networks,
+        "carried_forward_networks": skipped,
+        "last_known_good": {"counts": lkg_counts, "total": lkg_total},
+        "candidate_stats": stats,
+        "geocode": {"filled": filled, "flagged": flagged},
+        "gates_passed": ok,
+        "gate_failures": failures,
+    }
 
     if not ok:
         json.dump(report, open(REPORT, "w", encoding="utf-8"), indent=2)
@@ -149,10 +202,14 @@ def main():
 
     print("\n=== per-network (last-known -> candidate) ===")
     for net in common.NETWORKS:
-        print(f"  {net:4} {lkg_counts.get(net,0):>5} -> {stats['network_counts'].get(net,0):<5}")
+        print(
+            f"  {net:4} {lkg_counts.get(net,0):>5} -> {stats['network_counts'].get(net,0):<5}"
+        )
     print(f"  coord completeness: {stats['coord_completeness']*100:.2f}%")
     print(f"  new parks: {ex_stats['new_parks']}  removed: {ex_stats['removed_parks']}")
-    print(f"app file written to: {target}  ({'ARTIFACT - committed file untouched' if DRY_RUN else 'COMMITTED PATH'})")
+    print(
+        f"app file written to: {target}  ({'ARTIFACT - committed file untouched' if DRY_RUN else 'COMMITTED PATH'})"
+    )
     print("report:", REPORT)
 
 

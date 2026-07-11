@@ -17,9 +17,13 @@ database plus engagement evidence is the moat. Revenue is signal, not the goal.
 
 North star, in priority order: database depth/coverage/quality, then the pipeline that maintains
 it, then user base and engagement evidence, then feature surface. Never polish the feature surface
-while the first three have open gaps. Canonical production domain stays `hitch-pass-app.vercel.app`
-(a 2026-07-05 register item proposed flipping it to `hitchpass.vercel.app`; that was backwards and
-is not applied).
+while the first three have open gaps. Canonical production domain is `hitchpass.vercel.app` as of
+the 2026-07-10 SEO/landing directive (this supersedes the earlier 2026-07-05 note that kept
+`hitch-pass-app.vercel.app` and called the flip backwards; James reversed that call in the directive,
+so the flip IS now applied). `hitch-pass-app.vercel.app` remains a live alias to the same Vercel
+project, so old links still resolve; all new canonical/OG/share/sitemap URLs use `hitchpass.vercel.app`.
+Stripe redirect URLs in `api/*` still reference the old alias and were intentionally left untouched
+(payment code is out of scope for that directive); both aliases work.
 
 ## Product facts
 
@@ -27,8 +31,9 @@ is not applied).
   letter UI, assets, or copy as TrailHopper or HitchPass.
 - Pricing: free tier + Pro at $4.50/mo billed annually ($54/yr, `5400`) or $6.50/mo monthly
   (`650`).
-- Support email: supporthitchpass@gmail.com. Production: `hitch-pass-app.vercel.app`
-  (auto-deploys from `main` via Vercel). Never treat a preview URL as production.
+- Support email: supporthitchpass@gmail.com. Production: `hitchpass.vercel.app`
+  (auto-deploys from `main` via Vercel; `hitch-pass-app.vercel.app` is a live legacy alias).
+  Never treat a preview URL as production.
 
 ## Architecture
 
@@ -132,7 +137,7 @@ The Transfer Packet (lives in the HitchPass Drive folder; the artifact a buyer's
 
 - Architecture one-pager: stack, data flow, hosting, auth, payments.
 - Runbook: deploy, rollback, env vars, secrets inventory, account handoff (Vercel, Supabase
-  `rhqnsjnmlrshrifewxtr`, Stripe, domain `hitch-pass-app.vercel.app`).
+  `rhqnsjnmlrshrifewxtr`, Stripe, domain `hitchpass.vercel.app`, legacy alias `hitch-pass-app.vercel.app`).
 - Data dictionary: parks database schema, sources, update pipeline, quality notes.
 - Cost-to-operate sheet: every service, tier, monthly cost.
 - Admin guide: user management, subscription states, webhook behavior, known issues.
@@ -201,7 +206,8 @@ Rules per round:
 - Webhook logic changes must address or explicitly preserve-and-note the known race
   (`customer.subscription.created` overwriting `active` with `incomplete`).
 - State WHICH URL the report's claims were verified against. Production is
-  `hitch-pass-app.vercel.app`; a preview deploy is not production and must be labeled.
+  `hitchpass.vercel.app` (legacy alias `hitch-pass-app.vercel.app` still resolves); a preview
+  deploy is not production and must be labeled.
 
 ## Jim's standing 2-minute smoke script (use as the manual test baseline)
 Hard-refresh production → login → walk all six tabs → add a membership card → reload →
