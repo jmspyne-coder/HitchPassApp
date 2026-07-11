@@ -1,6 +1,6 @@
 /* Hitch Pass service worker — offline-first for a single static app.
    App data lives in localStorage, so only the static shell is cached. */
-var CACHE = "hitchpass-v17";
+var CACHE = "hitchpass-v18";
 
 /* Same-origin shell — must all cache or install fails (these always exist).
    Icons carry ?v=2 to match the head/manifest hrefs (defeats HTTP cache on logo refresh). */
@@ -50,8 +50,12 @@ self.addEventListener("fetch", function(e){
   if (req.mode === "navigate"){
     e.respondWith(
       fetch(req).then(function(res){
-        var copy = res.clone();
-        caches.open(CACHE).then(function(c){ c.put("./index.html", copy); }).catch(function(){});
+        /* Only cache a successful shell. Caching a 404/redirect here would poison ./index.html
+           and pin it for every later navigation (e.g. a /welcome that 404s pre-deploy). */
+        if (res && res.ok && res.type !== "opaqueredirect"){
+          var copy = res.clone();
+          caches.open(CACHE).then(function(c){ c.put("./index.html", copy); }).catch(function(){});
+        }
         return res;
       }).catch(function(){
         return caches.match("./index.html").then(function(r){ return r || caches.match("./"); });
