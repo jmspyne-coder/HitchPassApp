@@ -3188,7 +3188,8 @@
     perksExpanded: {},   // Perks Section A: which feature rows are expanded (by index)
     perksCompare: false, // Perks Section C: full 4-tier matrix open/closed
     tipPrompt: false,    // tip jar overlay open
-    sharePrompt: false   // share prompt overlay open (7-day cadence, offset from the tip jar)
+    sharePrompt: false,  // share prompt overlay open (7-day cadence, offset from the tip jar)
+    installPrompt: false // "add to Home Screen" overlay open (14-day cadence, lowest priority)
   };
   var mapInstance = null;   // active Leaflet map (Explore → Map); torn down each render
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
@@ -4151,6 +4152,7 @@
         }
         if (state.isPaid) state.upsell = null;   // going Pro dismisses any open upgrade prompt
         maybeShowTip();                          // Tip jar: raise the 14-day prompt once entitlement is known
+        maybeShowInstall();                      // Then the install nudge, only if tip/share didn't take the stage
         render();
       });
     }).catch(function(){});
@@ -5237,6 +5239,60 @@
     if (shareDue()) setTimeout(maybeShowShare, 500);
   }
   function dismissShare(){ state.sharePrompt = false; markShareShown(); render(); }
+
+  /* ---- Install prompt: "Add to Home Screen" nudge for un-installed visitors ----
+     Android/Chrome fire beforeinstallprompt, which we capture and replay from our own button.
+     iOS Safari has no such event, so we show Apple's Share -> Add to Home Screen instructions.
+     Lowest-priority prompt: never stacks over the tip jar or share sheet; 14-day dismiss cadence. */
+  var INSTALL_KEY = "hitchpass-install-dismissed";
+  var INSTALL_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
+  var deferredInstall = null;   // captured beforeinstallprompt event (Android/Chrome only)
+  var installPlatform = null;   // "ios" | "android"
+  function installDismissedRecently(){
+    try { var last = parseInt(localStorage.getItem(INSTALL_KEY) || "0", 10);
+      return last > 0 && (Date.now() - last) < INSTALL_INTERVAL_MS; } catch(e){ return false; }
+  }
+  function markInstallDismissed(){ try { localStorage.setItem(INSTALL_KEY, String(Date.now())); } catch(e){} }
+  function isStandalone(){
+    try { return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; } catch(e){ return false; }
+  }
+  /* iOS Safari only. Chrome/Firefox on iOS (CriOS/FxiOS) can't add to Home Screen, so exclude them.
+     iPadOS reports as MacIntel, so treat a touch-capable "Mac" as iOS too. */
+  function iosSafari(){
+    var ua = navigator.userAgent || "";
+    var isIos = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|Chrome|Android/.test(ua);
+    return isIos && isSafari;
+  }
+  /* Raise the install nudge once the main app is visible and entitlement is known — same entry gates as
+     the share sheet, and never over the tip jar / share / post-checkout confirm. Android needs the
+     captured event; iOS falls back to instructions. Idempotent: safe to call from boot and from the
+     beforeinstallprompt handler (which can land after entitlement resolves). */
+  function maybeShowInstall(){
+    if (state.installPrompt) return;                 // already open
+    if (isStandalone()) return;                      // already installed
+    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout) return;
+    if (state.tipPrompt || state.tipToast || state.sharePrompt) return;   // never stack
+    if (installDismissedRecently()) return;
+    var plat = deferredInstall ? "android" : (iosSafari() ? "ios" : null);
+    if (!plat) return;                               // wait for beforeinstallprompt, or not an installable context
+    installPlatform = plat;
+    state.installPrompt = true;
+    render();
+  }
+  function dismissInstall(){ state.installPrompt = false; markInstallDismissed(); render(); }
+  /* Replay the captured native install prompt (Android/Chrome). Whatever the user chooses, respect the
+     14-day cadence so we don't re-nag on the next visit. */
+  function doInstall(){
+    var e = deferredInstall;
+    if (!e){ dismissInstall(); return; }
+    state.installPrompt = false; markInstallDismissed(); render();
+    try {
+      e.prompt();
+      if (e.userChoice && e.userChoice.then){ e.userChoice.then(function(){ deferredInstall = null; }, function(){ deferredInstall = null; }); }
+      else { deferredInstall = null; }
+    } catch(err){ deferredInstall = null; }
+  }
   /* The tip prompt overlay. Presets + a Custom inline input ($1–$500). Inner card is data-act="noop"
      so taps inside reach their own buttons without bubbling to the backdrop’s dismiss. */
   function tipPromptHTML(){
@@ -5286,6 +5342,33 @@
         '<div style="font-size:13px;color:'+C.muted+';margin-top:9px;line-height:1.55">Hitch Pass is free and grows by word of mouth. If it’s been useful, share it with a campground neighbor or your RV group.</div>'+
         '<button class="tap" data-act="share-prompt-send" style="margin-top:16px;width:100%;padding:13px;border-radius:12px;background:'+C.ember+';color:#fff;font-weight:800;font-size:15px">Share Hitch Pass</button>'+
         '<button class="tap" data-act="share-prompt-dismiss" style="margin-top:12px;width:100%;color:'+C.muted+';font-weight:700;font-size:13px;background:none;padding:6px">Not now</button>'+
+      '</div></div>';
+  }
+  /* Install prompt overlay — same bottom-sheet pattern as the tip jar. iOS shows Share-sheet
+     instructions; Android shows a live Install button wired to the captured event. */
+  function installPromptHTML(){
+    if (!state.installPrompt) return "";
+    var head = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'+
+        '<img src="icon-192.png" alt="" width="46" height="46" style="width:46px;height:46px;border-radius:12px;flex-shrink:0" />'+
+        '<div><div style="font-size:16px;font-weight:800;color:'+C.ink+'">Add Hitch Pass to your Home Screen</div>'+
+          '<div style="font-size:12.5px;color:'+C.muted+';margin-top:2px">One tap to open, works offline, no app store needed</div></div>'+
+      '</div>';
+    var body;
+    if (installPlatform === "ios"){
+      var shareSvg = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="'+C.ember+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin:0 2px">'+
+        '<path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+      body = '<div style="font-size:13.5px;line-height:1.6;color:'+C.ink+';margin-bottom:14px">Tap the <b>Share</b> button '+shareSvg+' in Safari, then scroll down and tap <b>“Add to Home Screen.”</b></div>'+
+        '<button class="tap" data-act="install-later" style="width:100%;padding:12px;border-radius:12px;background:none;border:1px solid rgba(31,28,23,.2);color:'+C.muted+';font-weight:700;font-size:14px">Maybe later</button>';
+    } else {
+      body = '<div style="display:flex;gap:10px">'+
+        '<button class="tap" data-act="install-later" style="flex:1;padding:13px;border-radius:12px;background:none;border:1px solid rgba(31,28,23,.2);color:'+C.muted+';font-weight:700;font-size:14px">Not now</button>'+
+        '<button class="tap" data-act="install-do" style="flex:1;padding:13px;border-radius:12px;background:'+C.ember+';color:#fff;border:none;font-weight:800;font-size:14px">Install</button>'+
+      '</div>';
+    }
+    return '<div data-act="install-bg" style="position:fixed;inset:0;background:rgba(15,28,20,.72);z-index:62;'+
+      'display:flex;align-items:flex-end;justify-content:center;padding:18px">'+
+      '<div data-act="noop" style="background:#fff;border-radius:18px;max-width:360px;width:100%;padding:20px;box-shadow:0 -8px 40px rgba(0,0,0,.4)">'+
+        head + body +
       '</div></div>';
   }
 
@@ -5399,7 +5482,7 @@
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+alertBannersHTML()+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML() + sharePromptHTML() + wizardOverlayHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML() + sharePromptHTML() + installPromptHTML() + wizardOverlayHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -5461,6 +5544,8 @@
     else if (act==="tip-toast-close"){ state.tipToast=false; render(); }
     else if (act==="share-prompt-bg" || act==="share-prompt-dismiss"){ dismissShare(); }
     else if (act==="share-prompt-send"){ shareApp(); dismissShare(); }
+    else if (act==="install-bg" || act==="install-later"){ dismissInstall(); }
+    else if (act==="install-do"){ doInstall(); }
     else if (act==="addtrip"){
       var pk=parkById(state.selected);
       if (!pk) return;
@@ -5613,6 +5698,11 @@
       state.bookReturnShow = true; render();
     }
   });
+  // Capture Chrome/Android's install event so we can replay it from our own Install button, and
+  // clear the nudge if the app gets installed by any means. Registered before initAuth so an early
+  // beforeinstallprompt is never missed.
+  window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); deferredInstall = e; maybeShowInstall(); });
+  window.addEventListener("appinstalled", function(){ deferredInstall = null; state.installPrompt = false; markInstallDismissed(); render(); });
   initAuth();   // restore any persisted Supabase session + reflect signed-in state (no-op if sb is null)
   var sp = document.getElementById("splash");
   if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }
