@@ -4245,8 +4245,8 @@
       a.busy = false;
       if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; render(); return; }
       a.password = ""; a.error = "";
-      if (isSignup) track("sign_up", { method: "email" });   // conversion: new account created
-      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); }
+      if (isSignup){ track("sign_up", { method: "email" }); justSignedUp = true; }   // conversion: new account created — arm the install nudge for this session
+      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); if (isSignup) maybeShowInstall(); }   // last step of signup: offer Add-to-Home-Screen before plan selection
       render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
     }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
   }
@@ -5185,6 +5185,7 @@
   var INSTALL_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
   var deferredInstall = null;   // captured beforeinstallprompt event (Android/Chrome only)
   var installPlatform = null;   // "ios" | "android"
+  var justSignedUp = false;     // armed once when an account is created this session; gates the nudge to the signup moment (resets on reload → no later-visit nagging)
   function installDismissedRecently(){
     try { var last = parseInt(localStorage.getItem(INSTALL_KEY) || "0", 10);
       return last > 0 && (Date.now() - last) < INSTALL_INTERVAL_MS; } catch(e){ return false; }
@@ -5201,14 +5202,15 @@
     var isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|Chrome|Android/.test(ua);
     return isIos && isSafari;
   }
-  /* Raise the install nudge once the main app is visible and entitlement is known — same entry gates as
-     the share sheet, and never over the tip jar / share / post-checkout confirm. Android needs the
-     captured event; iOS falls back to instructions. Idempotent: safe to call from boot and from the
-     beforeinstallprompt handler (which can land after entitlement resolves). */
+  /* Raise the install nudge as the final step of signup — right after account creation, before plan
+     selection — gated on justSignedUp so it never fires as a random nudge on a later visit. Never over
+     the tip jar / share / post-checkout confirm. Android needs the captured event; iOS falls back to
+     instructions. Idempotent: safe to call from the signup handler and from the beforeinstallprompt
+     handler (which can land before OR after account creation within the same session). */
   function maybeShowInstall(){
     if (state.installPrompt) return;                 // already open
     if (isStandalone()) return;                      // already installed
-    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout) return;
+    if (!signedIn() || !justSignedUp || state.confirmCheckout) return;   // signup moment only
     if (state.tipPrompt || state.tipToast || state.sharePrompt) return;   // never stack
     if (installDismissedRecently()) return;
     var plat = deferredInstall ? "android" : (iosSafari() ? "ios" : null);
