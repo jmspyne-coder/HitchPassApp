@@ -247,6 +247,113 @@
     });
   })();
 
+  /* ============================================================================
+     MEMBERSHIP RULES ENGINE (Membership-Engine directive, 2026-07-10)
+     ----------------------------------------------------------------------------
+     MEMBERSHIP_TIERS is the user-facing catalog: every TT membership tier a member
+     might hold, including the three legacy lifetime tiers. It carries the ROI/add-on
+     metadata (extra weeks, holiday reservations, TC/TC+ eligibility) the profile and
+     ROI dashboard need.
+
+     The BOOKING/STAY MATH still flows through the single audited source (PERKS →
+     ttTierRules → effectiveBooking). Each catalog tier maps down to one of the four
+     sellable engine tiers (camping/journey/explore/adventure) via engineTierFor(),
+     so there is exactly one set of window/max-stay numbers and no second table to
+     drift. zone_pass ≡ the Annual Camping Pass ("camping") engine tier.
+     ============================================================================ */
+  var MEMBERSHIP_TIERS = {
+    zone_pass: {
+      name: "Zone Camping Pass", engine: "camping",
+      maxStayDays: 14, timeoutDays: 7, timeoutTriggerDays: 4,
+      bookingWindowDays: 60, parkToPark: false,
+      trailsCollectionIncluded: false, highUseRestrictions: true, maxReservationsOnBooks: 2,
+      description: "Single region, entry-level"
+    },
+    journey: {
+      name: "Journey", engine: "journey",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 120, parkToPark: true,
+      trailsCollectionIncluded: true, trailsCollectionBookingWindow: 60, trailsCollectionMaxStay: 14,
+      highUseRestrictions: true, maxReservationsOnBooks: 2,
+      extraWeeksPerYear: 2, extraWeekCost: 29,
+      description: "All TT parks, 120-day window, park-to-park"
+    },
+    explore: {
+      name: "Explore", engine: "explore",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 150, parkToPark: true,
+      trailsCollectionIncluded: true, trailsCollectionBookingWindow: 60, trailsCollectionMaxStay: 14,
+      highUseRestrictions: true, maxReservationsOnBooks: 2,
+      extraWeeksPerYear: 2, extraWeekCost: 29,
+      description: "All TT parks, 150-day window, park-to-park"
+    },
+    adventure: {
+      name: "Adventure", engine: "adventure",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 180, parkToPark: true,
+      trailsCollectionIncluded: true, trailsCollectionPlusAvailable: true,
+      trailsCollectionBookingWindow: 90, trailsCollectionMaxStay: 21,
+      highUseRestrictions: true, maxReservationsOnBooks: 2,
+      extraWeeksPerYear: 4, extraWeekCost: 29, highUseExtraWeeks: 2, highUseExtraWeekCost: 99,
+      holidayReservations: 2,
+      description: "All TT parks, 180-day window, TC+ eligible"
+    },
+    elite_basic: {
+      name: "Elite Basic (Legacy)", engine: "journey",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 120, parkToPark: true,
+      trailsCollectionIncluded: false, highUseRestrictions: true,
+      description: "Legacy lifetime, roughly equal to Journey"
+    },
+    elite_connections: {
+      name: "Elite Connections (Legacy)", engine: "explore",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 180, parkToPark: true,
+      trailsCollectionIncluded: false, highUseRestrictions: true,
+      description: "Legacy lifetime, roughly equal to Explore"
+    },
+    adventure_legacy: {
+      name: "Adventure (Legacy Lifetime)", engine: "adventure",
+      maxStayDays: 21, timeoutDays: 0, timeoutTriggerDays: null,
+      bookingWindowDays: 180, parkToPark: true,
+      trailsCollectionIncluded: true, trailsCollectionPlusAvailable: true,
+      trailsCollectionBookingWindow: 90, trailsCollectionMaxStay: 21,
+      highUseRestrictions: true,
+      description: "Legacy lifetime Adventure"
+    }
+  };
+  /* Order shown in the picker: current tiers first, legacy grouped after. */
+  var MEMBERSHIP_ORDER = ["zone_pass","journey","explore","adventure","elite_basic","elite_connections","adventure_legacy"];
+  function membershipDef(key){ return MEMBERSHIP_TIERS[key] || null; }
+  /* Catalog tier → audited engine tier (the single booking-math source). */
+  function engineTierFor(key){ var d = MEMBERSHIP_TIERS[key]; return (d && d.engine) || "adventure"; }
+  /* Reverse: an engine tier → its catalog default (used by the legacy Perks tier picker). */
+  var ENGINE_TO_MEMBERSHIP = { camping:"zone_pass", journey:"journey", explore:"explore", adventure:"adventure" };
+  /* Does this member's plan grant Trails Collection booking? Included in-tier OR bought as an add-on. */
+  function hasTC(){ var d = membershipDef(state.membership.tier); return !!(d && d.trailsCollectionIncluded) || !!state.membership.hasTrailsCollection; }
+  function hasTCPlus(){ var d = membershipDef(state.membership.tier); return !!(d && (d.trailsCollectionPlusAvailable) && (d.trailsCollectionIncluded)) || !!state.membership.hasTrailsCollectionPlus; }
+
+  /* ---- High-use park intelligence (client-side; parks DB untouched, per Do-Not-Touch) ----
+     TT/Encore high-use resorts book out fast in a seasonal window (typically winter sunbelt).
+     Seeded from the directive's known list — community-sourced, verify with TT. Matched by
+     park name + network + state so no parks.data.json change is required. */
+  var HIGH_USE_SEASON = { label:"Nov 1 – Apr 30 (winter)", startMonth: 11, endMonth: 4 };
+  var HIGH_USE_TT_NAMES = { "orlando":1, "peace river":1, "medina lake":1, "lake conroe":1, "colorado river":1, "verde valley":1, "palm springs":1, "pio pico":1 };
+  var HIGH_USE_STATES_ENC = { FL:1, AZ:1 };   // most Encore FL/AZ resorts run high-use in winter
+  function isHighUsePark(p){
+    if (!p) return false;
+    if (p.highUse) return true;   // honor an explicit data flag if the pipeline ever sets one
+    var nm = String(p.name||"").toLowerCase();
+    if (p.network==="tt"){ for (var k in HIGH_USE_TT_NAMES){ if (nm.indexOf(k)>-1) return true; } return false; }
+    if (p.network==="enc"){ return !!HIGH_USE_STATES_ENC[p.st]; }
+    return false;
+  }
+  /* Is today inside the high-use season window (spans the year boundary Nov→Apr)? */
+  function inHighUseSeason(d){
+    var m = (d || new Date()).getMonth()+1;   // 1..12
+    return m>=HIGH_USE_SEASON.startMonth || m<=HIGH_USE_SEASON.endMonth;
+  }
+
   /* illustrative sample across networks/regions; swap for real export */
   var PARKS = [
     { id:1, name:"Bay Landing", city:"Bridgeport", st:"TX", network:"tt", lat:33.1807831, lng:-97.8348619 },
@@ -3043,7 +3150,24 @@
     trips: saved.trips || [],
     favorites: saved.favorites || [],
     profile: saved.profile || { members:{}, rigLength:null },
-    tier: saved.tier || "adventure",
+    tier: saved.tier || "adventure",   // engine tier (camping/journey/explore/adventure); kept in sync with membership.tier
+    membership: (function(){
+      var m = saved.membership || {};
+      if (!m.tier || !MEMBERSHIP_TIERS[m.tier]){ m.tier = ENGINE_TO_MEMBERSHIP[saved.tier] || "adventure"; }   // migrate legacy state.tier → catalog
+      if (typeof m.hasTrailsCollection !== "boolean") m.hasTrailsCollection = false;
+      if (typeof m.hasTrailsCollectionPlus !== "boolean") m.hasTrailsCollectionPlus = false;
+      if (typeof m.hasRPI !== "boolean") m.hasRPI = false;
+      if (!Array.isArray(m.zones)) m.zones = [];
+      if (typeof m.annualDues === "undefined") m.annualDues = null;
+      if (typeof m.purchasePrice === "undefined") m.purchasePrice = null;
+      if (typeof m.purchaseDate === "undefined") m.purchaseDate = "";
+      if (typeof m.highUseResCount !== "number") m.highUseResCount = 0;
+      return m;
+    })(),
+    stays: saved.stays || [],       // stay history log: [{id, parkId, parkName, network, dateIn, dateOut}]
+    watch: saved.watch || {},       // per-favorite target arrival dates for Action Dates: { parkId: "YYYY-MM-DD" }
+    memWizard: null,                // tier questionnaire state, null = closed
+    bannersDismissed: {},           // in-app alert banner dismissal (session-scoped, keyed by signature)
     q: "", netFilter: "", freeOnly: false, favOnly: false,
     regionFilter: new Set(),   // selected regions (multi-select); empty = ALL regions. Transient, not persisted.
     account: { email:"", password:"", authMode:"login", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
@@ -3069,7 +3193,10 @@
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
   function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
   if (!state.profile.members) state.profile.members = {};
-  function persist(){ save({ wallet:state.wallet, trips:state.trips, favorites:state.favorites, profile:state.profile, tier:state.tier }); }
+  state.tier = engineTierFor(state.membership.tier);   // engine tier always derived from the catalog selection
+  /* Set the member's catalog tier; keep the engine tier (booking math) in sync. */
+  function setMembershipTier(key){ if (!MEMBERSHIP_TIERS[key]) return; state.membership.tier = key; state.tier = engineTierFor(key); persist(); }
+  function persist(){ save({ wallet:state.wallet, trips:state.trips, favorites:state.favorites, profile:state.profile, tier:state.tier, membership:state.membership, stays:state.stays, watch:state.watch }); }
   function isFav(id){ return !!(state.favorites && state.favorites.indexOf(id)>=0); }
 
 
@@ -3178,6 +3305,11 @@
       var r = ttTierRules[state.tier];
       return { window:r.window, maxDaysIn:r.maxDaysIn, daysOut:r.daysOut, parkToPark:r.parkToPark, tierKey:state.tier, tierAware:true };
     }
+    // Encore / Trails Collection: window + max-stay depend on whether the member holds TC or TC+.
+    if ((p.network==="enc" || p.network==="dc") && (hasTC() || hasTCPlus())){
+      var win = hasTCPlus() ? 90 : 60, mx = hasTCPlus() ? 21 : 14;
+      return { window:win, maxDaysIn:mx, daysOut:0, parkToPark:hasTCPlus(), tierKey:state.membership.tier, tierAware:true, tc:true };
+    }
     return { window:net.window, maxDaysIn:net.maxStay, daysOut:0, parkToPark:false, tierAware:false };
   }
   /* Configured max-stay (nights) for a network, tier-aware via effectiveBooking — READ from config,
@@ -3277,6 +3409,7 @@
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px">'+
         tile("compass",C.pine2,"Explore parks",union+" locations","explore")+
         tile("percent",C.green,"Free in my wallet","$0 only","explorefree")+
+        tile("calendar",C.pine,"Booking dates","When to book","trips")+
         tile("pin",C.ember,"Coverage &amp; savings","Pitch tool","tools")+
         tile("userplus",C.clay,"Refer a friend","Send to your agent","refer")+
       '</div>';
@@ -3314,7 +3447,7 @@
     var net = NETWORKS[p.network];
     var rig = state.profile.rigLength;
     var tags = pill(cost(p));
-    if (p.highUse) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 8px;border-radius:999px">Books fast</span>';
+    if (isHighUsePark(p)) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.ember+';background:rgba(207,90,38,.10);padding:3px 8px;border-radius:999px">Books fast</span>';
     if (rig && p.maxRig && rig>p.maxRig) tags += ' <span style="font-size:11px;font-weight:700;color:'+C.clay+';background:rgba(168,71,47,.12);padding:3px 8px;border-radius:999px">Rig too long</span>';
     return '<button class="pcard tap" data-act="park" data-arg="'+p.id+'">'+
       '<div style="flex:1">'+
@@ -3560,8 +3693,18 @@
         ? '<div style="margin-top:14px;font-size:13px"><span style="color:'+C.muted+'">Your '+esc(net.short)+' #: </span><b>'+esc(num)+'</b> <button class="tap" data-act="copynum" style="color:'+C.green+';font-weight:700;font-size:12.5px;margin-left:6px">Copy</button></div>'
         : '<div style="margin-top:14px;font-size:12px;color:'+C.muted+'">Add your '+esc(net.short)+' number in Profile for one-tap copy at booking.</div>');
 
+    var highUseNotice = "";
+    if (isHighUsePark(p)){
+      var mdef = membershipDef(state.membership.tier), inSeason = inHighUseSeason();
+      var extraWk = (mdef && mdef.highUseExtraWeeks) ? ' Adventure members can add an extra week for $'+mdef.highUseExtraWeekCost+' during high-use.' : '';
+      highUseNotice = '<div style="margin-top:12px;background:rgba(207,90,38,.08);border:1px solid '+C.ember+';border-radius:13px;padding:12px 14px">'+
+        '<div style="display:flex;align-items:center;gap:8px"><span style="color:'+C.ember+'">'+ic("alert",16,C.ember)+'</span>'+
+        '<span style="font-size:13.5px;font-weight:700">High-use period'+(inSeason?' · active now':'')+'</span></div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.45">'+esc(HIGH_USE_SEASON.label)+'. Max 2 reservations on the books, stays capped at 14 days.'+extraWk+' Books out fast — verify specifics with TT.</div></div>';
+    }
     return head +
       '<div style="margin-top:14px;font-size:12.5px;color:'+C.muted+';font-weight:600">'+rules+'</div>'+
+      highUseNotice+
       '<div style="display:flex;gap:10px;margin-top:12px">'+
         '<div style="flex:1"><div class="dlabel">Arrival</div><input class="dinput" type="date" data-date="in" value="'+esc(state.dates.in)+'" /></div>'+
         '<div style="flex:1"><div class="dlabel">Departure</div><input class="dinput" type="date" data-date="out" value="'+esc(state.dates.out)+'" /></div>'+
@@ -3677,6 +3820,7 @@
       '</div>';
     if (!trips.length){
       return head + '<div style="font-size:12.5px;color:'+C.muted+'">Your saved stays and booking windows</div></div>'+
+        bookingDatesSection()+
         '<div style="padding:30px 24px;text-align:center;color:'+C.muted+'">'+ic("calendar",34,"#cdbfa6")+
         '<div style="font-size:15px;font-weight:700;color:'+C.ink+';margin-top:10px">No trips saved yet</div>'+
         '<div style="font-size:13px;margin-top:6px;line-height:1.5">Find a park in Explore to track its booking window, or log a reservation you’ve already made.</div>'+
@@ -3686,6 +3830,7 @@
     var upcoming = trips.filter(function(t){ return !t.dateOut || t.dateOut>=today; });
     var past = trips.filter(function(t){ return t.dateOut && t.dateOut<today; });
     var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · windows &amp; check-ins tracked</div></div>'+
+      bookingDatesSection()+
       '<div style="padding:6px 16px 8px">'+
       (pushSupported() && !pushOn() ? '<button class="tap" data-act="enable-push" style="width:100%;margin-bottom:10px;padding:11px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("bell",15,"#faf6ec")+'Get booking-window alerts</button>' : '');
     html += upcoming.map(function(t){ return tripCard(t,false); }).join("");
@@ -4159,6 +4304,307 @@
       '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">You’re signed out. Use the login screen to sign in.</div></div>';
   }
 
+  /* ============================================================================
+     MEMBERSHIP ENGINE — UI (My Membership, ROI, Stay History, Booking Dates,
+     tier wizard, in-app alert banners). All additive; nothing above is torn out.
+     ============================================================================ */
+
+  /* ---- My Membership card (Part A2) ---- */
+  function membershipCard(){
+    var m = state.membership, def = membershipDef(m.tier);
+    function opt(k){ var d=MEMBERSHIP_TIERS[k]; return '<option value="'+k+'"'+(m.tier===k?' selected':'')+'>'+esc(d.name)+'</option>'; }
+    var sel = '<select class="dinput" data-mem-select style="margin-top:10px">'+
+        '<optgroup label="Current tiers">'+["zone_pass","journey","explore","adventure"].map(opt).join("")+'</optgroup>'+
+        '<optgroup label="Legacy lifetime">'+["elite_basic","elite_connections","adventure_legacy"].map(opt).join("")+'</optgroup>'+
+      '</select>';
+    function addon(key,label){ return '<button class="fchip tap'+(m[key]?" on":"")+'" data-act="mem-addon" data-arg="'+key+'">'+esc(label)+'</button>'; }
+    var tcIncluded = def && def.trailsCollectionIncluded, tcPlusElig = def && def.trailsCollectionPlusAvailable;
+    var addons = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+
+        (tcIncluded ? '<span class="fchip on" style="pointer-events:none;opacity:.9">Trails Collection · included</span>' : addon("hasTrailsCollection","Trails Collection add-on"))+
+        (tcPlusElig ? addon("hasTrailsCollectionPlus","Trails Collection Plus") : "")+
+        addon("hasRPI","RPI")+
+      '</div>';
+    function numField(label,key,val,ph){ return '<div style="margin-top:12px"><div class="dlabel">'+label+'</div><input class="dinput" data-mem="'+key+'" type="number" inputmode="decimal" value="'+esc(val==null?"":String(val))+'" placeholder="'+esc(ph)+'" /></div>'; }
+    var dateField = '<div style="margin-top:12px"><div class="dlabel">Purchase date</div><input class="dinput" data-mem-date="purchaseDate" type="date" value="'+esc(m.purchaseDate||"")+'" /></div>';
+    var slots = (def && def.maxReservationsOnBooks) ? def.maxReservationsOnBooks : 2, cur = m.highUseResCount||0;
+    var slotCounter = (def && def.highUseRestrictions)
+      ? '<div style="border-top:1px solid rgba(31,28,23,.08);margin-top:14px;padding-top:12px"><div class="dlabel" style="font-size:12px">High-use reservations on the books</div>'+
+          '<div style="font-size:12px;color:'+C.muted+';margin-top:4px;line-height:1.5">During a high-use season you may hold up to '+slots+'. Tap as you book and cancel.</div>'+
+          '<div style="display:flex;align-items:center;gap:16px;margin-top:11px">'+
+            '<button class="fchip tap" data-act="hu-res" data-arg="dec"'+(cur<=0?' disabled style="opacity:.4;pointer-events:none"':'')+'>–</button>'+
+            '<span class="disp" style="font-size:20px;font-weight:800;color:'+(cur>=slots?C.clay:C.ink)+'">'+cur+' / '+slots+'</span>'+
+            '<button class="fchip tap" data-act="hu-res" data-arg="inc"'+(cur>=slots?' disabled style="opacity:.4;pointer-events:none"':'')+'>+</button>'+
+          '</div></div>'
+      : "";
+    return '<div class="det">'+
+      '<div class="dlabel" style="font-size:12px">My membership</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Sets your booking window, stay limits, and Perks. '+esc(def?def.description:"")+'</div>'+
+      sel + addons +
+      '<div style="font-size:12px;color:'+C.muted+';margin-top:14px;line-height:1.5">For the cost-per-night math below — leave blank if unsure.</div>'+
+      numField("Annual dues ($)","annualDues",m.annualDues,"e.g. 1200")+
+      numField("One-time purchase price ($)","purchasePrice",m.purchasePrice,"e.g. 9500")+
+      dateField + slotCounter +
+      '<button class="btnG tap" data-act="wiz-open" style="margin-top:16px">Which tier is right for me?</button>'+
+      '</div>';
+  }
+
+  /* ---- Membership ROI dashboard (Part E1) ---- */
+  var RETAIL_NIGHT = 65;   // avg retail nightly rate assumption (directive)
+  function amortizedPurchase(m){ var price=parseFloat(m.purchasePrice); return (isFinite(price)&&price>0) ? price/10 : 0; }   // conservative 10-yr hold
+  function nightsThisYear(){
+    var y=(new Date()).getFullYear(), total=0, parks={};
+    state.stays.forEach(function(s){
+      if (!s.dateIn || !s.dateOut) return;
+      var n=nightsBetween(s.dateIn,s.dateOut);
+      if (n>0 && new Date(s.dateIn+"T00:00:00").getFullYear()===y){ total+=n; parks[s.parkId||s.parkName]=1; }
+    });
+    return { nights:total, parks:Object.keys(parks).length };
+  }
+  function roiStats(){
+    var m=state.membership, dues=parseFloat(m.annualDues)||0, amort=amortizedPurchase(m), annualCost=dues+amort;
+    var uy=nightsThisYear(), nights=uy.nights;
+    var now=new Date(), startYr=new Date(now.getFullYear(),0,1);
+    var dayOfYear=Math.max(1,Math.round((now-startYr)/86400000)+1);
+    var pace=nights*(365/dayOfYear);
+    return {
+      annualCost:annualCost, nights:nights,
+      costPerNight: nights>0 ? annualCost/nights : null,
+      savings: nights*RETAIL_NIGHT - annualCost,
+      breakEven: annualCost>0 ? Math.ceil(annualCost/RETAIL_NIGHT) : null,
+      projSavings: pace*RETAIL_NIGHT - annualCost,
+      hasCost: annualCost>0
+    };
+  }
+  function roiCard(){
+    var r=roiStats();
+    if (!r.hasCost){
+      return '<div class="det"><div class="dlabel" style="font-size:12px">Membership ROI</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:6px;line-height:1.5">Enter your annual dues (and purchase price) in My Membership to see cost-per-night, savings vs. retail, and your break-even.</div></div>';
+    }
+    function tileBox(label,val,sub,col){
+      return '<div style="flex:1;min-width:130px;background:rgba(31,28,23,.03);border:1px solid rgba(31,28,23,.08);border-radius:12px;padding:12px">'+
+        '<div style="font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:'+C.muted+'">'+label+'</div>'+
+        '<div class="disp" style="font-size:22px;font-weight:800;color:'+(col||C.ink)+';margin-top:3px;line-height:1.1">'+val+'</div>'+
+        (sub?'<div style="font-size:11.5px;color:'+C.muted+';margin-top:3px;line-height:1.4">'+sub+'</div>':'')+'</div>';
+    }
+    var cpn = r.costPerNight!=null ? fmtMoney(r.costPerNight) : "—";
+    var savCol = r.savings>=0 ? C.green : C.clay;
+    var tiles = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
+      tileBox("Cost / night", cpn, r.nights+" night"+(r.nights===1?"":"s")+" logged this year")+
+      tileBox("Savings vs retail", fmtMoney(r.savings), "at $"+RETAIL_NIGHT+"/night retail", savCol)+
+      tileBox("Break-even", (r.breakEven!=null? r.breakEven+" nights":"—"), "to cover "+fmtMoney(r.annualCost)+"/yr")+
+      tileBox("Projected / yr", fmtMoney(r.projSavings), "at your current pace", r.projSavings>=0?C.green:C.clay)+
+      '</div>';
+    return '<div class="det"><div class="dlabel" style="font-size:12px">Membership ROI</div>'+
+      '<div style="font-size:12px;color:'+C.muted+';margin-top:5px;line-height:1.5">Annual cost '+fmtMoney(r.annualCost)+' (dues'+(amortizedPurchase(state.membership)>0?" + amortized purchase over 10 yrs":"")+'). Log stays below to sharpen these.</div>'+
+      tiles+'</div>';
+  }
+
+  /* ---- Stay History Log (Part C2) ---- */
+  function activeStay(){ for(var i=0;i<state.stays.length;i++){ if(!state.stays[i].dateOut) return state.stays[i]; } return null; }
+  function startStayCheckIn(){ var a=activeStay(); if(a){ alert("Check out of your current stay first."); return; } state.stayForm={ query:"", parkId:null, parkName:"", network:"", dateIn:todayLocalStr(), error:"" }; render(); }
+  function saveStayCheckIn(){
+    var f=state.stayForm; if(!f) return;
+    if(!f.parkId && !(f.parkName||"").trim()){ f.error="Pick or name a park."; render(); return; }
+    state.stays.push({ id:Date.now(), parkId:f.parkId||null, parkName:f.parkName||"Park", network:f.network||"", dateIn:f.dateIn||todayLocalStr(), dateOut:"" });
+    state.stayForm=null; persist(); render();
+  }
+  function closeStay(id){ for(var i=0;i<state.stays.length;i++){ if(String(state.stays[i].id)===String(id)){ state.stays[i].dateOut=todayLocalStr(); persist(); render(); return; } } }
+  function stayName(s){ if(s.parkId){ var p=parkById(s.parkId); if(p) return p.name; } return s.parkName||"Park"; }
+  function stayFormHTML(){
+    var f=state.stayForm, favs=state.favorites.map(parkById).filter(Boolean);
+    var picker = favs.length
+      ? '<select class="dinput" data-stay-park style="margin-top:6px"><option value="">Select a saved park…</option>'+
+          favs.map(function(p){ return '<option value="'+p.id+'"'+(f.parkId===p.id?" selected":"")+'>'+esc(p.name)+' ('+esc((NETWORKS[p.network]||{}).short||p.network)+')</option>'; }).join("")+'</select>'
+      : '<input class="dinput" data-stay-name type="text" value="'+esc(f.parkName||"")+'" placeholder="Park name" style="margin-top:6px" />'+
+          '<div style="font-size:11.5px;color:'+C.muted+';margin-top:6px;line-height:1.5">Tip: favorite parks in Explore to pick them from a list here.</div>';
+    return '<div style="border:1px solid '+C.green+';border-radius:12px;padding:13px;margin-top:12px;background:rgba(47,107,70,.05)">'+
+      '<div class="dlabel" style="font-size:12px">Check in</div>'+ picker +
+      '<div style="margin-top:10px"><div class="dlabel">Arrival date</div><input class="dinput" data-stay-date type="date" value="'+esc(f.dateIn||"")+'" /></div>'+
+      (f.error?'<div style="color:'+C.clay+';font-size:12px;font-weight:700;margin-top:8px">'+esc(f.error)+'</div>':"")+
+      '<div style="display:flex;gap:8px;margin-top:12px"><button class="btnP tap" data-act="stay-save" style="flex:1">Save check-in</button>'+
+      '<button class="btnG tap" data-act="stay-cancel" style="flex:1">Cancel</button></div></div>';
+  }
+  function stayHistoryCard(){
+    var act=activeStay(), uy=nightsThisYear();
+    var body="";
+    if (act){
+      var eb=effectiveBooking({ network:act.network }), max=eb.maxDaysIn||0;
+      var dayN = nightsBetween(act.dateIn, todayLocalStr())+1;
+      var mustLeave = max>0 ? isoDate(new Date(new Date(act.dateIn+"T00:00:00").getTime()+max*86400000)) : null;
+      body += '<div style="border:1px solid '+C.green+';border-radius:12px;padding:13px;margin-top:12px;background:rgba(47,107,70,.06)">'+
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:'+C.green+'">Currently checked in</div>'+
+        '<div class="disp" style="font-size:17px;font-weight:800;margin-top:3px">'+esc(stayName(act))+'</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:3px">'+(max>0?('Day '+dayN+' of '+max+' · depart by '+esc(mustLeave)):("Checked in "+esc(act.dateIn)))+'</div>'+
+        '<button class="btnP tap" data-act="stay-checkout" data-arg="'+act.id+'" style="margin-top:11px">Check out today</button></div>';
+    } else if (state.stayForm){
+      body += stayFormHTML();
+    } else {
+      body += '<button class="btnG tap" data-act="stay-checkin" style="margin-top:12px">Check in to a park</button>';
+    }
+    // past stays (most recent first)
+    var past = state.stays.filter(function(s){ return s.dateOut; }).slice().sort(function(a,b){ return (b.dateIn||"").localeCompare(a.dateIn||""); });
+    var list = past.length ? '<div style="margin-top:14px">'+past.slice(0,12).map(function(s){
+        var n=nightsBetween(s.dateIn,s.dateOut);
+        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(31,28,23,.07)">'+
+          '<div style="flex:1"><div style="font-size:13.5px;font-weight:700">'+esc(stayName(s))+'</div>'+
+          '<div style="font-size:11.5px;color:'+C.muted+'">'+esc(s.dateIn)+' → '+esc(s.dateOut)+' · '+n+' night'+(n===1?"":"s")+'</div></div>'+
+          '<button class="tap" data-act="stay-remove" data-arg="'+s.id+'" style="font-size:12px;color:'+C.muted+';padding:4px 6px">Remove</button></div>';
+      }).join("")+'</div>' : "";
+    var usage = '<div style="font-size:12.5px;color:'+C.muted+';margin-top:6px;line-height:1.5">This year: <b style="color:'+C.ink+'">'+uy.nights+' night'+(uy.nights===1?"":"s")+'</b> across <b style="color:'+C.ink+'">'+uy.parks+' park'+(uy.parks===1?"":"s")+'</b>.</div>';
+    return '<div class="det"><div class="dlabel" style="font-size:12px">Stay history</div>'+ usage + body + list +'</div>';
+  }
+
+  /* ---- Booking Dates: single-park calc + Action Dates dashboard (Part B) ---- */
+  function targetOf(p){ return state.watch[p.id] || ""; }
+  function bookingWindowFor(p){
+    var eb=effectiveBooking(p), target=targetOf(p);
+    if (!eb.window || !target) return null;
+    var arrival=new Date(target+"T00:00:00");
+    var openDate=new Date(arrival.getTime()-eb.window*86400000);
+    var openIn=Math.ceil((openDate-new Date(new Date().toDateString()))/86400000);
+    return { window:eb.window, openDate:openDate, openIn:openIn, open:openIn<=0, arrival:arrival, eb:eb };
+  }
+  function bookingDatesSection(){
+    var m=state.membership, def=membershipDef(m.tier);
+    var favs=state.favorites.map(parkById).filter(Boolean);
+    var head='<div class="det"><div class="dlabel" style="font-size:12px">Your booking window</div>'+
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">On <b style="color:'+C.ink+'">'+esc(def?def.name:"your plan")+'</b> you can book TT parks up to <b style="color:'+C.ink+'">'+(def?def.bookingWindowDays:180)+' days</b> ahead'+
+      (hasTC()?(' · Trails Collection up to <b style="color:'+C.ink+'">'+(hasTCPlus()?90:60)+' days</b>'):'')+'. Set a target arrival on a saved park to see exactly when its window opens.</div></div>';
+    if (!favs.length){
+      return head+'<div class="det"><div style="font-size:13px;color:'+C.muted+';line-height:1.55;text-align:center;padding:8px 4px">Favorite parks in <b style="color:'+C.ink+'">Explore</b> (tap the ☆), then come back to line up your booking dates.</div>'+
+        '<button class="btnG tap" data-act="nav" data-arg="explore" style="margin-top:6px">Browse parks</button></div>';
+    }
+    // Editor: each favorite gets a target-arrival date input + live status
+    var rows=favs.map(function(p){
+      var net=NETWORKS[p.network]||{}, bw=bookingWindowFor(p);
+      var status;
+      if (!targetOf(p)) status='<span style="color:'+C.muted+';font-size:12px">Set a target arrival →</span>';
+      else if (bw && bw.open) status='<span style="color:'+C.green+';font-weight:700;font-size:12px">🟢 Book now (open '+ (bw.openIn===0?"today": Math.abs(bw.openIn)+"d ago")+')</span>';
+      else if (bw) status='<span style="color:'+C.ember+';font-weight:700;font-size:12px">Opens in '+bw.openIn+' day'+(bw.openIn===1?"":"s")+' ('+fmtDate(bw.openDate)+')</span>';
+      else status='<span style="color:'+C.muted+';font-size:12px">No fixed window</span>';
+      return '<div style="padding:11px 0;border-top:1px solid rgba(31,28,23,.07)">'+
+        '<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:14px;font-weight:700">'+esc(p.name)+'</span>'+
+          '<span style="font-size:10.5px;color:'+C.muted+';font-weight:700;background:#f0ebdd;padding:2px 7px;border-radius:6px">'+esc(net.short||p.network)+'</span></div>'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'+
+          '<input class="dinput" data-watch="'+p.id+'" type="date" value="'+esc(targetOf(p))+'" style="flex:1;margin:0" />'+
+          (targetOf(p)?'<button class="tap" data-act="watch-clear" data-arg="'+p.id+'" style="font-size:12px;color:'+C.muted+';padding:6px">Clear</button>':'')+
+        '</div>'+
+        '<div style="margin-top:7px">'+status+'</div></div>';
+    }).join("");
+    var editor='<div class="det"><div class="dlabel" style="font-size:12px">Saved parks — target arrivals</div>'+rows+'</div>';
+    // Calendar: bucket favorites that have a target
+    var withT=favs.filter(function(p){ return !!targetOf(p) && bookingWindowFor(p); })
+      .map(function(p){ return { p:p, bw:bookingWindowFor(p) }; })
+      .sort(function(a,b){ return a.bw.openDate-b.bw.openDate; });
+    var cal="";
+    if (withT.length){
+      function bucket(title,items,col){
+        if(!items.length) return "";
+        return '<div style="margin-top:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+col+'">'+title+'</div>'+
+          items.map(function(it){
+            var net=NETWORKS[it.p.network]||{};
+            var when = it.bw.open ? ("window open") : ("opens "+fmtDate(it.bw.openDate));
+            return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid rgba(31,28,23,.06)"><span style="font-size:13px;font-weight:600">'+esc(it.p.name)+' <span style="color:'+C.muted+';font-weight:700;font-size:10.5px">'+esc(net.short||it.p.network)+'</span></span><span style="font-size:12px;color:'+C.muted+'">'+when+'</span></div>';
+          }).join("")+'</div>';
+      }
+      var now=withT.filter(function(x){ return x.bw.open; });
+      var soon=withT.filter(function(x){ return !x.bw.open && x.bw.openIn<=14; });
+      var later=withT.filter(function(x){ return !x.bw.open && x.bw.openIn>14; });
+      cal='<div class="det"><div class="dlabel" style="font-size:12px">📅 Your booking calendar</div>'+
+        (now.length||soon.length||later.length?"":'<div style="font-size:12.5px;color:'+C.muted+';margin-top:6px">Set target dates above to populate this.</div>')+
+        bucket("🟢 Book now",now,C.green)+bucket("🟡 Opening soon",soon,C.ember)+bucket("⏳ Upcoming",later,C.muted)+'</div>';
+    }
+    return head + cal + editor;
+  }
+
+  /* ---- Tier recommendation wizard (Part F) ---- */
+  var WIZ_Q = [
+    { key:"nights", q:"How many nights a year do you camp?", opts:[["<20","Under 20"],["20-40","20 to 40"],["40-80","40 to 80"],["80+","80 or more"]] },
+    { key:"multiRegion", q:"Do you travel to multiple regions?", opts:[["no","No, mostly one area"],["yes","Yes, all over"]] },
+    { key:"longStays", q:"Do you want stays longer than 14 days?", opts:[["no","No"],["yes","Yes"]] },
+    { key:"winter", q:"Do you camp Florida or Arizona in winter?", opts:[["no","No"],["yes","Yes"]] },
+    { key:"plan", q:"How far ahead do you usually plan?", opts:[["1-3","1 to 3 months"],["4","About 4 months"],["5","About 5 months"],["6","6 months or more"]] }
+  ];
+  function wizardAnswer(val){
+    var w=state.memWizard; if(!w) return;
+    var q=WIZ_Q[w.step]; if(!q) return;
+    w.ans[q.key]=val; w.step++;
+    if (w.step>=WIZ_Q.length){ var res=wizardRecommend(w.ans); w.result=res.tier; w.rationale=res.why; }
+    render();
+  }
+  function wizardRecommend(a){
+    var plan=a.plan||"1-3";
+    var months = plan==="6"?6 : plan==="5"?5 : plan==="4"?4 : 2;
+    var nights = a.nights==="80+"?90 : a.nights==="40-80"?60 : a.nights==="20-40"?30 : 12;
+    var tier, why;
+    // Low usage, single region, short stays, plans near-term → the entry Zone pass.
+    if (nights<=30 && a.multiRegion!=="yes" && a.longStays!=="yes" && a.winter!=="yes" && months<=3){
+      tier="zone_pass"; why="Low usage in one region with short stays — the entry Zone pass covers it without paying for a wider booking window.";
+    } else {
+      if (months>=6) tier="adventure"; else if (months>=5) tier="explore"; else if (months>=4) tier="explore"; else tier="journey";
+      // Winter sunbelt is high-use — the longest booking window wins the good sites.
+      if (a.winter==="yes"){ tier = (months>=5 || a.multiRegion==="yes") ? "adventure" : "explore"; }
+      var d=MEMBERSHIP_TIERS[tier];
+      why = "Park-to-park stays up to 21 days and a "+d.bookingWindowDays+"-day booking window fit "+(a.winter==="yes"?"winter sunbelt high-use season":(a.multiRegion==="yes"?"multi-region travel":"how far ahead you plan"))+".";
+    }
+    return { tier:tier, why:why };
+  }
+  function wizardOverlayHTML(){
+    var w=state.memWizard; if(!w) return "";
+    var inner;
+    if (w.step<WIZ_Q.length){
+      var q=WIZ_Q[w.step];
+      inner='<div style="font-size:12px;font-weight:700;color:'+C.muted+'">Question '+(w.step+1)+' of '+WIZ_Q.length+'</div>'+
+        '<div class="disp" style="font-size:20px;font-weight:800;margin-top:6px;line-height:1.2">'+esc(q.q)+'</div>'+
+        '<div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">'+
+          q.opts.map(function(o){ return '<button class="btnG tap" data-act="wiz-answer" data-arg="'+o[0]+'" style="text-align:left">'+esc(o[1])+'</button>'; }).join("")+
+        '</div>';
+    } else {
+      var d=MEMBERSHIP_TIERS[w.result];
+      inner='<div style="font-size:12px;font-weight:700;color:'+C.muted+'">Recommended for you</div>'+
+        '<div class="disp" style="font-size:24px;font-weight:800;color:'+C.green+';margin-top:6px">'+esc(d.name)+'</div>'+
+        '<div style="font-size:13px;color:'+C.muted+';margin-top:8px;line-height:1.55">'+esc(w.rationale)+'</div>'+
+        '<div style="font-size:12.5px;color:'+C.muted+';margin-top:10px;line-height:1.5">Up to '+d.bookingWindowDays+'-day booking window · '+d.maxStayDays+'-day max stay'+(d.parkToPark?' · park-to-park':'')+'.</div>'+
+        '<div style="display:flex;gap:8px;margin-top:16px"><button class="btnP tap" data-act="wiz-apply" style="flex:1">Set as my tier</button>'+
+        '<button class="btnG tap" data-act="wiz-restart" style="flex:1">Start over</button></div>';
+    }
+    return '<div data-act="wiz-close" style="position:fixed;inset:0;background:rgba(21,17,12,.55);z-index:60;display:flex;align-items:flex-end;justify-content:center">'+
+      '<div style="background:'+C.cream+';width:100%;max-width:440px;border-radius:20px 20px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom))">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:13px;font-weight:800;color:'+C.ink+'">Which tier is right for me?</span>'+
+        '<button class="tap" data-act="wiz-close" style="font-size:20px;color:'+C.muted+';line-height:1;padding:2px 6px">×</button></div>'+
+        inner+'</div></div>';
+  }
+
+  /* ---- In-app alert banners (Part G) ---- */
+  function alertBanners(){
+    var out=[], today=new Date(new Date().toDateString());
+    // (a) a favorited park's booking window opens within 3 days
+    state.favorites.map(parkById).filter(Boolean).forEach(function(p){
+      var bw=bookingWindowFor(p); if(!bw) return;
+      if (bw.openIn>0 && bw.openIn<=3){ out.push({ sig:"bw-"+p.id+"-"+bw.openIn, text:"🔔 Booking window for "+p.name+" opens in "+bw.openIn+" day"+(bw.openIn===1?"":"s")+".", col:C.ember }); }
+    });
+    // (b) active stay within 3 days of its max
+    var act=activeStay();
+    if (act){
+      var eb=effectiveBooking({ network:act.network }), max=eb.maxDaysIn||0;
+      if (max>0){
+        var end=new Date(new Date(act.dateIn+"T00:00:00").getTime()+max*86400000);
+        var daysLeft=Math.ceil((end-today)/86400000);
+        if (daysLeft>=0 && daysLeft<=3){ out.push({ sig:"stay-"+act.id+"-"+daysLeft, text:"⏰ Your stay at "+stayName(act)+" ends in "+daysLeft+" day"+(daysLeft===1?"":"s")+". Time to book your next park.", col:C.clay }); }
+      }
+    }
+    return out.filter(function(b){ return !state.bannersDismissed[b.sig]; });
+  }
+  function alertBannersHTML(){
+    var bs=alertBanners(); if(!bs.length) return "";
+    return bs.map(function(b){
+      return '<div style="margin:10px 16px 0;background:#fff;border:1px solid '+b.col+';border-left-width:4px;border-radius:12px;padding:11px 13px;display:flex;align-items:flex-start;gap:10px">'+
+        '<span style="flex:1;font-size:13px;font-weight:600;color:'+C.ink+';line-height:1.45">'+esc(b.text)+'</span>'+
+        '<button class="tap" data-act="banner-dismiss" data-arg="'+esc(b.sig)+'" style="font-size:16px;color:'+C.muted+';line-height:1;padding:0 4px">×</button></div>';
+    }).join("");
+  }
+
   function profileView(){
     var prof = state.profile;
     return ''+
@@ -4169,7 +4615,9 @@
       accountCard()+
       walletCard()+
       memberNumbersCard()+
-      tierCard()+
+      membershipCard()+
+      roiCard()+
+      stayHistoryCard()+
       '<div class="det">'+
         '<div class="dlabel" style="font-size:12px">Referral setup</div>'+
         '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Saved on this device. Used to pre-write referral texts from you to your salesperson.</div>'+
@@ -4885,10 +5333,10 @@
     else { body = homeView(); }
     app.innerHTML = '<div class="wrap">'+
       '<div class="ribbon">'+ic("alert",14,"#e0875a")+'<span>Unofficial · made by a customer, not by Thousand Trails / Encore / ELS · all names are trademarks of their owners</span></div>'+
-      '<div class="content">'+(state.inviteMsg?inviteBanner():"")+body+'</div>'+
+      '<div class="content">'+(state.inviteMsg?inviteBanner():"")+alertBannersHTML()+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
-    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML() + sharePromptHTML();
+    '</div>' + upgradeOverlayHTML() + calOverlayHTML() + dirOverlayHTML() + bookReturnHTML() + tipPromptHTML() + tipToastHTML() + sharePromptHTML() + wizardOverlayHTML();
     if (state.tab==="explore" && !state.selected && state.exploreMode==="map"){ initExploreMap(); }
   }
 
@@ -4973,7 +5421,24 @@
       if (wi>-1) state.wallet.splice(wi,1); else state.wallet.push(arg);
       persist(); render();
     }
-    else if (act==="set-tier"){ if (perksTierDef(arg)){ state.tier=arg; persist(); render(); } }
+    else if (act==="set-tier"){ if (ENGINE_TO_MEMBERSHIP[arg]){ setMembershipTier(ENGINE_TO_MEMBERSHIP[arg]); render(); } }
+    else if (act==="set-membership"){ setMembershipTier(arg); render(); }
+    else if (act==="mem-addon"){ var mk = arg; state.membership[mk] = !state.membership[mk]; persist(); render(); }
+    else if (act==="hu-res"){ var d = (arg==="inc")?1:-1; state.membership.highUseResCount = Math.max(0, (state.membership.highUseResCount||0)+d); persist(); render(); }
+    else if (act==="stay-checkin"){ startStayCheckIn(); }
+    else if (act==="stay-checkout"){ closeStay(arg); }
+    else if (act==="stay-remove"){ state.stays = state.stays.filter(function(s){ return String(s.id)!==String(arg); }); persist(); render(); }
+    else if (act==="stay-save"){ saveStayCheckIn(); }
+    else if (act==="stay-cancel"){ state.stayForm=null; render(); }
+    else if (act==="stay-pick"){ var sp=parkById(parseInt(arg,10)); if(sp&&state.stayForm){ state.stayForm.parkId=sp.id; state.stayForm.parkName=sp.name; state.stayForm.network=sp.network; state.stayForm.query=sp.name; } render(); }
+    else if (act==="watch-clear"){ delete state.watch[arg]; persist(); render(); }
+    else if (act==="wiz-open"){ state.memWizard={ step:0, ans:{} }; render(); }
+    else if (act==="wiz-close"){ state.memWizard=null; render(); }
+    else if (act==="wiz-answer"){ wizardAnswer(arg); }
+    else if (act==="wiz-restart"){ state.memWizard={ step:0, ans:{} }; render(); }
+    else if (act==="wiz-apply"){ if (state.memWizard && state.memWizard.result){ setMembershipTier(state.memWizard.result); state.memWizard=null; state.tab="profile"; render(); } }
+    else if (act==="banner-dismiss"){ state.bannersDismissed[arg]=true; render(); }
+    else if (act==="nav-dates"){ state.tab="trips"; state.tripsDates=true; render(); }
     else if (act==="perks-toggle"){ state.perksExpanded[arg]=!state.perksExpanded[arg]; render(); }
     else if (act==="perks-compare"){ state.perksCompare=!state.perksCompare; render(); }
     else if (act==="tools-radius"){ state.tools.radius=parseInt(arg,10); render(); }
@@ -5029,12 +5494,20 @@
     if (ak){ state.account[ak]=t.value; if(state.account.error) state.account.error=""; return; }   // transient; Supabase owns the session
     var tk = t.getAttribute("data-tools");
     if (tk){ state.tools[tk]=t.value; if(tk!=="city") updateSavings(); return; }
+    var memk = t.getAttribute("data-mem");
+    if (memk){ var mv=String(t.value).trim(); state.membership[memk] = (mv==="" ? null : (isFinite(parseFloat(mv)) ? parseFloat(mv) : null)); persist(); return; }   // annualDues / purchasePrice (numeric)
+    if (t.hasAttribute && t.hasAttribute("data-stay-name") && state.stayForm){ state.stayForm.parkName=t.value; return; }
     if (t.id==="bookingPark"){ state.bookingForm.parkQuery=t.value; state.bookingForm.parkId=null; updateBookingResults(); return; }
     var bk = t.getAttribute("data-booking");
     if (bk){ state.bookingForm[bk]=t.value; return; }
   });
   document.addEventListener("change", function(e){
     var t = e.target; if (!t || !t.getAttribute) return;
+    if (t.hasAttribute("data-mem-select")){ setMembershipTier(t.value); render(); return; }
+    if (t.hasAttribute("data-mem-date")){ state.membership.purchaseDate=t.value; persist(); return; }
+    if (t.hasAttribute("data-stay-park") && state.stayForm){ var sid=parseInt(t.value,10); var sp=sid?parkById(sid):null; state.stayForm.parkId=sp?sp.id:null; state.stayForm.parkName=sp?sp.name:""; state.stayForm.network=sp?sp.network:""; return; }
+    if (t.hasAttribute("data-stay-date") && state.stayForm){ state.stayForm.dateIn=t.value; return; }
+    var wk=t.getAttribute("data-watch"); if (wk){ if(t.value) state.watch[wk]=t.value; else delete state.watch[wk]; persist(); render(); return; }
     var d = t.getAttribute("data-date");
     if (d){ state.dates[d]=t.value; render(); return; }
     var bd = t.getAttribute("data-bdate");
