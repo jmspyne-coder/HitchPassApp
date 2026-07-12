@@ -3162,6 +3162,7 @@
       if (typeof m.purchasePrice === "undefined") m.purchasePrice = null;
       if (typeof m.purchaseDate === "undefined") m.purchaseDate = "";
       if (typeof m.highUseResCount !== "number") m.highUseResCount = 0;
+      if (typeof m.customRules === "undefined") m.customRules = null;   // grandfathered/non-standard plan override; null = use tier engine (unchanged behavior)
       return m;
     })(),
     stays: saved.stays || [],       // stay history log: [{id, parkId, parkName, network, dateIn, dateOut}]
@@ -3296,14 +3297,42 @@
   }
   function nightsBetween(a,b){ if(!a||!b) return 0; return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
   function todayLocalStr(){ var d=new Date(); function z(n){ return (n<10?"0":"")+n; } return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
+  /* ---- Custom plan-rule overrides (grandfathered / non-standard TT contracts) ----
+     Older Thousand Trails contracts carry different stay terms than the sellable
+     tiers. When a member sets custom rules they override the tier engine numbers;
+     null (the default) means "use my tier's standard terms" and nothing changes. */
+  function tierBaseRules(){
+    var r = ttTierRules[state.tier] || {}, d = membershipDef(state.membership.tier) || {};
+    return {
+      maxDaysIn: (r.maxDaysIn!=null ? r.maxDaysIn : (d.maxStayDays||0)),
+      daysOut:   (r.daysOut!=null   ? r.daysOut   : (d.timeoutDays||0)),
+      window:    (r.window!=null    ? r.window    : (d.bookingWindowDays||0)),
+      parkToPark:(r.parkToPark!=null ? r.parkToPark : !!d.parkToPark)
+    };
+  }
+  function seedCustomRules(){ var b=tierBaseRules(); return { maxDaysIn:b.maxDaysIn, daysOut:b.daysOut, window:b.window, parkToPark:!!b.parkToPark, notes:"" }; }
+  /* Resolve custom rules, filling any blanked field from the tier base so the clock never breaks. */
+  function resolvedCustomRules(){
+    var cr=state.membership.customRules; if(!cr) return null;
+    var b=tierBaseRules(), pick=function(v,f){ return (v==null||v===""||!isFinite(v)) ? f : v; };
+    return { window:pick(cr.window,b.window), maxDaysIn:pick(cr.maxDaysIn,b.maxDaysIn), daysOut:pick(cr.daysOut,b.daysOut), parkToPark:!!cr.parkToPark };
+  }
+
   /* Single place that knows TT is tier-driven. Returns the resolved booking
      numbers for a park; non-TT (and TT with unknown/unset tier) fall back to the
-     flat NETWORKS values, tierAware:false, no throw. */
+     flat NETWORKS values, tierAware:false, no throw. Custom plan rules, when set,
+     override the tier numbers for TT parks. */
   function effectiveBooking(p){
     var net = NETWORKS[p.network] || {};
-    if (p.network==="tt" && ttTierRules[state.tier]){
-      var r = ttTierRules[state.tier];
-      return { window:r.window, maxDaysIn:r.maxDaysIn, daysOut:r.daysOut, parkToPark:r.parkToPark, tierKey:state.tier, tierAware:true };
+    if (p.network==="tt"){
+      var cr = resolvedCustomRules();
+      if (cr){
+        return { window:cr.window, maxDaysIn:cr.maxDaysIn, daysOut:cr.daysOut, parkToPark:cr.parkToPark, tierKey:state.membership.tier, tierAware:true, custom:true };
+      }
+      if (ttTierRules[state.tier]){
+        var r = ttTierRules[state.tier];
+        return { window:r.window, maxDaysIn:r.maxDaysIn, daysOut:r.daysOut, parkToPark:r.parkToPark, tierKey:state.tier, tierAware:true };
+      }
     }
     // Encore / Trails Collection: window + max-stay depend on whether the member holds TC or TC+.
     if ((p.network==="enc" || p.network==="dc") && (hasTC() || hasTCPlus())){
@@ -4310,6 +4339,32 @@
      ============================================================================ */
 
   /* ---- My Membership card (Part A2) ---- */
+  /* Plan Rules: preset = the member's tier (dropdown above); the override lets a
+     grandfathered / non-standard contract set its own stay-limit numbers. The tracker
+     and every booking calc read these through effectiveBooking(). */
+  function planRulesBlock(){
+    var m = state.membership, cr = m.customRules, base = tierBaseRules(), tierName = esc((membershipDef(m.tier)||{}).name || "your plan");
+    var head = '<div style="border-top:1px solid rgba(31,28,23,.08);margin-top:14px;padding-top:12px">';
+    if (!cr){
+      return head +
+        '<div class="dlabel" style="font-size:12px">Plan rules</div>'+
+        '<div style="font-size:12px;color:'+C.muted+';margin-top:5px;line-height:1.5">Using the standard <b style="color:'+C.ink+'">'+tierName+'</b> terms: <b style="color:'+C.ink+'">'+base.maxDaysIn+' nights</b> max at one park'+(base.parkToPark?', move park-to-park':', then '+base.daysOut+' out')+', '+base.window+'-day booking window.</div>'+
+        '<button class="btnG tap" data-act="cr-enable" style="margin-top:11px">My plan’s terms are different</button>'+
+      '</div>';
+    }
+    function crNum(label,key,val,ph){ return '<div style="margin-top:12px"><div class="dlabel">'+label+'</div><input class="dinput" data-cr="'+key+'" type="number" inputmode="numeric" min="0" step="1" value="'+esc(val==null?"":String(val))+'" placeholder="'+esc(ph)+'" /></div>'; }
+    var ptp = '<button class="fchip tap'+(cr.parkToPark?" on":"")+'" data-act="cr-ptp">Move park-to-park (no time out)</button>';
+    return head +
+      '<div class="dlabel" style="font-size:12px">Plan rules · <span style="color:'+C.green+';font-weight:800">custom</span></div>'+
+      crNum("Max stay at one park (nights)","maxDaysIn",cr.maxDaysIn,"e.g. 14")+
+      crNum("Days out of the network after a max stay","daysOut",cr.daysOut,"e.g. 7")+
+      crNum("Booking window (days ahead)","window",cr.window,"e.g. 60")+
+      '<div style="margin-top:12px">'+ptp+'</div>'+
+      '<div style="margin-top:12px"><div class="dlabel">Notes</div><input class="dinput" data-cr-notes type="text" value="'+esc(cr.notes||"")+'" placeholder="e.g. 1998 contract, verified with member services" /></div>'+
+      '<div style="font-size:11.5px;color:'+C.muted+';margin-top:10px;line-height:1.5">Plans vary, so check your contract or member services. These numbers only change what the app tracks.</div>'+
+      '<button class="btnG tap" data-act="cr-reset" style="margin-top:11px">Reset to '+tierName+' defaults</button>'+
+    '</div>';
+  }
   function membershipCard(){
     var m = state.membership, def = membershipDef(m.tier);
     function opt(k){ var d=MEMBERSHIP_TIERS[k]; return '<option value="'+k+'"'+(m.tier===k?' selected':'')+'>'+esc(d.name)+'</option>'; }
@@ -4339,7 +4394,7 @@
     return '<div class="det">'+
       '<div class="dlabel" style="font-size:12px">My membership</div>'+
       '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">Sets your booking window, stay limits, and Perks. '+esc(def?def.description:"")+'</div>'+
-      sel + addons +
+      sel + addons + planRulesBlock() +
       '<div style="font-size:12px;color:'+C.muted+';margin-top:14px;line-height:1.5">For the cost-per-night math below — leave blank if unsure.</div>'+
       numField("Annual dues ($)","annualDues",m.annualDues,"e.g. 1200")+
       numField("One-time purchase price ($)","purchasePrice",m.purchasePrice,"e.g. 9500")+
@@ -4401,6 +4456,13 @@
   }
 
   /* ---- Stay History Log (Part C2) ---- */
+  /* One-line summary of the rules the stay tracker is currently enforcing. */
+  function trackingLine(){
+    var eb = effectiveBooking({ network:"tt" });
+    var out = eb.parkToPark ? "park-to-park OK" : (eb.daysOut+" out");
+    var who = eb.custom ? "Custom rules" : ((membershipDef(state.membership.tier)||{}).name || "your plan");
+    return "Tracking: "+esc(who)+" · "+eb.maxDaysIn+" nights max · "+out;
+  }
   function activeStay(){ for(var i=0;i<state.stays.length;i++){ if(!state.stays[i].dateOut) return state.stays[i]; } return null; }
   function startStayCheckIn(){ var a=activeStay(); if(a){ alert("Check out of your current stay first."); return; } state.stayForm={ query:"", parkId:null, parkName:"", network:"", dateIn:todayLocalStr(), error:"" }; render(); }
   function saveStayCheckIn(){
@@ -4452,7 +4514,8 @@
           '<button class="tap" data-act="stay-remove" data-arg="'+s.id+'" style="font-size:12px;color:'+C.muted+';padding:4px 6px">Remove</button></div>';
       }).join("")+'</div>' : "";
     var usage = '<div style="font-size:12.5px;color:'+C.muted+';margin-top:6px;line-height:1.5">This year: <b style="color:'+C.ink+'">'+uy.nights+' night'+(uy.nights===1?"":"s")+'</b> across <b style="color:'+C.ink+'">'+uy.parks+' park'+(uy.parks===1?"":"s")+'</b>.</div>';
-    return '<div class="det"><div class="dlabel" style="font-size:12px">Stay history</div>'+ usage + body + list +'</div>';
+    var track = '<div style="font-size:12px;color:'+C.green+';font-weight:700;margin-top:4px;line-height:1.5">'+trackingLine()+'</div>';
+    return '<div class="det"><div class="dlabel" style="font-size:12px">Stay history</div>'+ usage + track + body + list +'</div>';
   }
 
   /* ---- Booking Dates: single-park calc + Action Dates dashboard (Part B) ---- */
@@ -5425,6 +5488,9 @@
     else if (act==="set-membership"){ setMembershipTier(arg); render(); }
     else if (act==="mem-addon"){ var mk = arg; state.membership[mk] = !state.membership[mk]; persist(); render(); }
     else if (act==="hu-res"){ var d = (arg==="inc")?1:-1; state.membership.highUseResCount = Math.max(0, (state.membership.highUseResCount||0)+d); persist(); render(); }
+    else if (act==="cr-enable"){ state.membership.customRules = seedCustomRules(); persist(); render(); }
+    else if (act==="cr-reset"){ state.membership.customRules = null; persist(); render(); }
+    else if (act==="cr-ptp"){ if(state.membership.customRules){ state.membership.customRules.parkToPark = !state.membership.customRules.parkToPark; persist(); render(); } }
     else if (act==="stay-checkin"){ startStayCheckIn(); }
     else if (act==="stay-checkout"){ closeStay(arg); }
     else if (act==="stay-remove"){ state.stays = state.stays.filter(function(s){ return String(s.id)!==String(arg); }); persist(); render(); }
@@ -5496,6 +5562,9 @@
     if (tk){ state.tools[tk]=t.value; if(tk!=="city") updateSavings(); return; }
     var memk = t.getAttribute("data-mem");
     if (memk){ var mv=String(t.value).trim(); state.membership[memk] = (mv==="" ? null : (isFinite(parseFloat(mv)) ? parseFloat(mv) : null)); persist(); return; }   // annualDues / purchasePrice (numeric)
+    var crk = t.getAttribute("data-cr");
+    if (crk && state.membership.customRules){ var cv=String(t.value).trim(); state.membership.customRules[crk] = (cv==="" ? null : (isFinite(parseFloat(cv)) ? parseFloat(cv) : null)); persist(); return; }   // custom stay-rule numbers
+    if (t.hasAttribute("data-cr-notes") && state.membership.customRules){ state.membership.customRules.notes = t.value; persist(); return; }
     if (t.hasAttribute && t.hasAttribute("data-stay-name") && state.stayForm){ state.stayForm.parkName=t.value; return; }
     if (t.id==="bookingPark"){ state.bookingForm.parkQuery=t.value; state.bookingForm.parkId=null; updateBookingResults(); return; }
     var bk = t.getAttribute("data-booking");
