@@ -1,0 +1,190 @@
+CODE SESSION REPORT
+report_id: 2026-08-21-polish-hitch-pass
+directive: DIRECTIVE 2026-08-21-polish-hitch-pass
+repo: HitchPassApp (launch dir /Users/jim/Rootwork/HitchPassApp)
+date: 2026-08-22
+model/effort: sonnet / high
+
+=====================================================================
+GATE-0 DEFECT (report as required by this session's enforcement contract)
+=====================================================================
+This session's SessionStart hook reported Gate-0 FAILED: no
+.claude/agents/gate-verifier.md under the repo root. Per the directive's own
+GIT-STATE clause, this is an anticipated condition ("if this repo lacks the
+three gate agents, install them from Rootwork-workspace/.claude/agents/ as
+the first commit... before any product PR merges").
+
+Consequence enforced for the remainder of this session: no merge of any PR,
+no push to a protected branch, no gate verdict recorded as PASS, no board
+Queue="Blocked" write. All of that was honored — both PRs below remain open,
+unmerged, and the board Queue field was left untouched (a status comment was
+posted instead; see board card).
+
+Fix filed this session: PR #16 installs the three gate agents (copied from
+Rootwork-workspace/.claude/agents/) so a FUTURE session launched from this
+repo passes Gate-0. It cannot fix the CURRENT session (Gate-0 is measured
+once at launch), so it is itself unmerged, pending a session where Gate-0
+passes.
+
+=====================================================================
+1. CHANGED FILES
+=====================================================================
+On branch polish/hitch-pass-2026-08-21 (worktree HitchPassApp-polish), PR #17:
+  index.html            - tip/share overlay first-use grace period; Refer tab
+                           info card; (4 commits, see git log below)
+  landing.html           - theme-color meta synced to #E8461E (was #1f3d2c)
+  sw.js                  - cache version hitchpass-v20 -> hitchpass-v21
+  .vercelignore           - new; excludes design/ from the production deploy
+  design/POLISH_SPEC.md   - new; full severity-ranked findings + build record
+  design/screenshots/     - new; 40 PNGs, before/ and after/, mobile+desktop
+
+On branch chore/gate-agent-bootstrap-2026-08-21 (worktree
+HitchPassApp-gatebootstrap), PR #16:
+  .claude/agents/gate-verifier.md      - new, copied from Rootwork-workspace
+  .claude/agents/reviewer.md            - new, copied from Rootwork-workspace
+  .claude/agents/security-reviewer.md   - new, copied from Rootwork-workspace
+
+Neither branch is merged. Nothing was pushed to main.
+
+=====================================================================
+2. VERIFICATION OUTPUT (pasted, not summarized)
+=====================================================================
+
+--- JS syntax gate (extracted inline <script> blocks from index.html) ---
+$ node -e "... new Function(block) for each of 3 inline scripts ..."
+block 0 OK
+block 1 OK
+block 2 OK
+
+--- sw.js syntax ---
+$ node --check sw.js
+(clean, no output = pass)
+
+--- SW cache version bump gate ---
+$ grep -n "CACHE = " sw.js
+3:var CACHE = "hitchpass-v21";
+
+--- theme-color consistency across all three declarations ---
+$ grep -n "theme-color" index.html landing.html; grep -n "theme_color" manifest.json
+landing.html:40:<meta name="theme-color" content="#E8461E" />
+index.html:11:<meta name="theme-color" content="#E8461E" />
+manifest.json:10:  "theme_color": "#E8461E",
+
+--- localStorage key unchanged ---
+$ grep -c "hitchpass.v1" index.html
+1   (present, unchanged - no migration needed, no new app-data key added;
+     hitchpass.firstSeen/tipLastShown/shareLastShown are prompt-cadence
+     metadata, not app data, matching the existing pattern)
+
+--- Behavioral fix verification (live Playwright run against a local server
+    on this branch, since Gate-0 blocks the merge that would deploy to prod) ---
+[new user] tip overlay right after signup: no (correct)
+[existing user, 20d since last tip, no firstSeen key] tip overlay on reload:
+  YES (correct - not newly delayed)
+
+--- Screenshot integrity (no duplicate/mislabeled evidence) ---
+Before/after sets both hash-verified distinct per screen (no repeat of the
+desktop-duplicate-MD5 bug from the first capture attempt, which was caught
+and re-shot before use).
+
+--- Independent review verdicts (fresh-context subagents, this session) ---
+reviewer:           PASS (full criteria table with file:line citations;
+                     independently re-derived and confirmed the tip/share
+                     regression fix rather than trusting the commit message)
+security-reviewer:  cycle 1 FAIL (live account email published to a public
+                     repo in 4 screenshots; mislabeled duplicate evidence
+                     file) -> both fixed same session, verified by re-review
+                     -> cycle 2 FAIL for one residual, non-code-fixable item
+                     (SEC-1: the pre-fix commit is already on the public
+                     remote and reachable by SHA even though the branch tip
+                     is clean; needs squash-merge + Supabase test-account
+                     retirement at actual merge time - both flagged as
+                     Jim's call, not attempted unilaterally). Full detail in
+                     design/POLISH_SPEC.md under "Security-review
+                     remediation."
+
+=====================================================================
+3. MANUAL TEST SCRIPT FOR JIM (once Gate-0 is fixed and these merge)
+=====================================================================
+This is written for AFTER a future session merges PR #16 then PR #17 (in
+that order) - nothing here works yet against hitchpass.vercel.app, since
+neither is deployed.
+
+1. New-user overlay fix: sign up a fresh test account (jmspyne+polish@ alias)
+   -> land on wallet home -> confirm NEITHER the tip-jar ("Enjoying Hitch
+   Pass?") nor the share prompt ("Know someone who'd use this?") appears
+   within the first few taps. Expected: clean first session, no interstitial.
+2. Refer tab: with no salesperson info in Profile, open Refer tab -> expected:
+   the "Add your salesperson's info" card PLUS a new "How this works" card
+   below it, not a mostly-blank screen.
+3. Install/PWA basics unaffected: confirm the app still installs and the
+   service worker updates cleanly (may require a hard refresh once per the
+   version bump - expected one-time behavior, not a bug).
+Two minutes, all three steps.
+
+=====================================================================
+4. ASSUMPTIONS MADE (ambiguity gate - batched per directive instruction)
+=====================================================================
+- 3-day grace period before the tip-jar/share-prompt can first show: no
+  specific figure was documented anywhere; picked 3 days as a reasonable
+  "let them get value first" window. Flag if a different number is wanted.
+- Landing page theme-color synced to #E8461E (the manifest/icon color)
+  rather than #cf5a26 (the in-app UI accent) - treated as restoring
+  consistency with the already-declared manifest value, not as picking a
+  new brand color. HIGH-5 in the spec flags the #E8461E-vs-#cf5a26 question
+  itself as an open brand decision, not resolved here.
+- Did NOT change the new-user wallet default (["tt","enc"]) or add hero
+  treatment for the 21-day clock, even though both are top-ranked findings
+  - both are product-behavior calls per the ambiguity gate, spec'd in detail
+  with a recommendation but left for Jim's decision.
+- Did NOT attempt a responsive desktop layout - sized as its own multi-round
+  project, not a same-round spot-fix.
+- Did NOT rewrite pushed git history or delete any Supabase account, even
+  though the security re-review flagged an exposed test-account address
+  still reachable in one commit's history - both are irreversible actions
+  outside a design-polish session's authority; documented for Jim instead
+  (design/POLISH_SPEC.md, "Security-review remediation" section).
+
+=====================================================================
+5. ROLLBACK
+=====================================================================
+Nothing is deployed or merged, so there is nothing live to roll back. To
+discard this session's work entirely if desired:
+  git push origin --delete polish/hitch-pass-2026-08-21
+  git push origin --delete chore/gate-agent-bootstrap-2026-08-21
+  git worktree remove /Users/jim/Rootwork/HitchPassApp-polish
+  git worktree remove /Users/jim/Rootwork/HitchPassApp-gatebootstrap
+  gh pr close 16 --repo jmspyne-coder/HitchPassApp
+  gh pr close 17 --repo jmspyne-coder/HitchPassApp
+None of this is recommended - both PRs are reviewed and ready for a future
+merge session once Gate-0 passes.
+
+=====================================================================
+6. PROMPTS RECEIVED
+=====================================================================
+No interactive tool-permission denials or blocking prompts were encountered
+during this session as far as this transcript can detect. The directive's
+PRE-APPROVED OPERATIONS section (full shell scope, npm/dev server,
+Playwright against prod, full git/gh, Vercel deploy) covered every action
+taken: git worktree/branch/commit/push, gh pr create, npm install (isolated
+to the scratchpad, not this repo), Playwright browser automation against
+both https://hitchpass.app and a local static server, and Notion
+read/comment calls. No operation required an unlisted permission.
+
+=====================================================================
+7. CHAIN OUTCOME
+=====================================================================
+Per the directive's CHAIN section, none of the three listed exits (GREEN /
+GATE FAIL AT CAP / BUDGET SHORT) cleanly describes this session's actual
+stopping condition, which is a session-infrastructure defect (Gate-0), not
+a content gate failure or a budget shortfall. Closest fit is "GATE FAIL AT
+CAP": parked, remediation filed (PR #16), spec stands as backlog (also
+covers the un-built HIGH findings). Not filing a new jq-hitchpass-polish-
+jim-look card, since the work is not green (unmerged) - a status comment
+was posted to the existing board card instead, Queue left untouched per
+the Gate-0 enforcement contract.
+
+FILED: design/POLISH_SPEC.md (branch polish/hitch-pass-2026-08-21),
+this report (same branch, directives/reports/), Notion board card comment.
+MotherDuck code_session_reports and Drive Code Reports folder: attempted
+after this file is committed; see session transcript for outcome.
