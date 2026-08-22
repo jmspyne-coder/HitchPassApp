@@ -126,13 +126,28 @@ bundled when this was deferred:
    into Profile — mirroring the existing Trips empty state. The redundant 12px
    "No cards yet — add them in Profile" hero line was dropped (the card now carries that message),
    and the Explore tile reads "Browse all parks" instead of a bleak "0 locations".
-2. *Changing the `["tt","enc"]` signup default to `[]`* — **STILL NOT BUILT, still Jim's call.**
-   This is the genuine product-behavior fork and it stays flagged. A `jim_rulings` probe returned
-   zero prior rulings on it (68 rulings on file, through 2026-08-22 03:03), so it is genuinely
-   unasked rather than already-decided.
+2. *Making new signups actually reach it* — **BUILT, behind a feature flag.** The first pass
+   built (1) only, and a fresh gate FAILED it: FL-H3's subject is the **new-user** empty state, and
+   with every signup seeded `["tt","enc"]` no new user could ever see the designed screen. A
+   designed-but-unreachable state does not satisfy the criterion. Corrected.
 
-Because (1) is done, (2) is now a one-line change (`wallet: saved.wallet || ["tt","enc"]` →
-`|| []`) with a designed destination already waiting behind it.
+   **Implemented differently from this spec's original Option A, deliberately.** Option A proposed
+   flipping the load default (`wallet: saved.wallet || ["tt","enc"]` → `|| []`). That is unsafe:
+   `persist()` runs only on a user action, so an existing user who has never taken one has no
+   stored wallet, and flipping the load default would silently empty their wallet on their next
+   visit — indistinguishable from data loss, for plausibly most of the 61 inactive accounts.
+
+   Instead the empty wallet is seeded **at account creation** (`authPassword()`, the `isSignup`
+   branch), gated by `FEATURES.EMPTY_WALLET_ON_SIGNUP`. The load default is untouched. Blast
+   radius is exactly "accounts created from this deploy forward"; every existing user is
+   bit-for-bit unaffected. Per the Transferability Standard the behavior is a config flag, so
+   restoring the legacy seeding is a one-word change, not a revert.
+
+**Correction to an earlier claim in this section:** an interim revision of this spec said the
+designed state "ships dark." That was wrong, and the security gate caught it. `wallet-toggle`
+(`index.html`, the Profile card toggles) lets any existing user remove every card and land on the
+empty state. The branch is reachable in production today. It is a strict improvement there — those
+users previously got a blank stats grid plus a 12px caption — but it is shipped code, not dead code.
 
 **Evidence note:** the `05-wallet-home-empty.png` files originally committed under this heading
 were byte-identical to `tab-home.png` at both viewports — they depicted the *populated* default

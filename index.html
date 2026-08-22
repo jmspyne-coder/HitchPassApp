@@ -3138,7 +3138,11 @@
     SHOW_PLAN_CHOICE: false,
     ENABLE_STRIPE_CHECKOUT: false,
     SHOW_DONATION_PROMPT: true,
-    SHOW_ADS: false
+    SHOW_ADS: false,
+    /* Seed a brand-new signup with an EMPTY wallet so the first screen is the designed
+       "Add your memberships" zero-state rather than a wallet pre-filled with networks the
+       user never chose. Flip to false to restore the legacy ["tt","enc"] seeding. */
+    EMPTY_WALLET_ON_SIGNUP: true
   };
   /* Voluntary "support Hitch Pass" link (Profile footnote). Placeholder until Jim supplies the real page. */
   var DONATE_URL = "https://buymeacoffee.com/hitchpass";
@@ -4262,7 +4266,16 @@
       a.busy = false;
       if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; render(); return; }
       a.password = ""; a.error = "";
-      if (isSignup){ track("sign_up", { method: "email" }); justSignedUp = true; }   // conversion: new account created — arm the install nudge for this session
+      if (isSignup){
+        track("sign_up", { method: "email" }); justSignedUp = true;   // conversion: new account created — arm the install nudge for this session
+        /* FL-H3: seed the new account's wallet EMPTY so the first screen is the designed
+           zero-state. Done here, at account creation, rather than by changing the load
+           default -- persist() only ever runs on a user action, so an existing user who
+           never triggered one has no stored wallet, and flipping the load default would
+           silently empty their wallet on next visit. Scoped this way it touches only
+           accounts created from this deploy forward; every existing user is untouched. */
+        if (FEATURES.EMPTY_WALLET_ON_SIGNUP){ state.wallet = []; persist(); }
+      }
       if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); if (isSignup) maybeShowInstall(); }   // last step of signup: offer Add-to-Home-Screen before plan selection
       render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
     }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });

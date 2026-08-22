@@ -9,7 +9,7 @@ LIVE PRODUCTION DEPLOYMENT AT TIME OF RECORDING
   commit        : 16d53f464e4087ce32ab0a7df270feb5d11582cf
   commit msg    : chore: install gate agents (gate-verifier, reviewer, security-reviewer) (#16)
   target        : production      state: READY      isRollbackCandidate: true
-  project       : hitch-pass-app  team: team_A4Y1eegfSDL2HWc1fo1ncaUR (Jim's projects, hobby)
+  project       : hitch-pass-app  (team id omitted - public repo; it is in the Vercel dashboard)
 
   NOTE: this deployment is code-identical to the app that 3910a0d served — PR #16
   added only .claude/agents/*.md, which ship nothing to the browser.

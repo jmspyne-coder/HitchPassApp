@@ -3,7 +3,7 @@ report_id: 2026-08-22-polish-hitch-pass-gate0-blocked
 directive: DIRECTIVE 2026-08-21-polish-hitch-pass (RESUME PROTOCOL 2026-08-22)
 repo: HitchPassApp
 launch dir: /Users/jim/Rootwork/HitchPassApp   <- CORRECT per directive
-machine: Jims-Mac-mini.local
+machine: [redacted - local dev host]
 date: 2026-08-22
 outcome: NON-EXECUTION (merge-class) / PARTIAL (severable work done)
 
@@ -53,7 +53,10 @@ WHAT WAS DONE (severable, non-merge)
        - every one has last_sign_in_at == created_at (created, used once, abandoned)
        - 0 rows in public.subscriptions for any of them
        - 0 of them outside the 2026-08-22 window
-       - total auth.users = 82, so the delete touches 16 and leaves 66 untouched
+       - the delete touches only those 16; all other accounts untouched
+         (absolute user counts intentionally not recorded here: this repo is
+          PUBLIC and user count is commercially sensitive under the acquisition
+          posture. Live figure is in Supabase.)
      This matches the prior session's own recommendation in POLISH_SPEC.md
      ("roughly 15 of them ... recommend clearing all of them").
      The scoped DELETE was refused by the Claude Code auto-mode classifier.
