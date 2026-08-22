@@ -3381,11 +3381,12 @@
        "No cards yet" line -- technically an empty state, visually a blank. This is the
        first screen for practically every new user, so it gets a designed zero-state:
        icon, headline, one honest line, one CTA into Profile. Mirrors the Trips empty
-       state (see "No trips saved yet"). NOTE: this does NOT change the ["tt","enc"]
-       signup default -- that is the product-behavior half of POLISH_SPEC HIGH-3, it is
-       still flagged for Jim, and it is deliberately NOT decided here. Consequence: new
-       signups do not land on this screen; it is reached by clearing your cards in
-       Profile. Making it the new-user default is Jim's call (see POLISH_SPEC HIGH-3). */
+       state (see "No trips saved yet"). REACHED BY: a brand-new signup (ruling
+       jr-20260822-hitchpass-wallet-empty-account-scoped -- see applyNewAccountWallet(),
+       which empties the wallet for a newly created account only, account-scoped), or any
+       user clearing their cards in Profile. The ["tt","enc"] literal above remains the
+       default for an EXISTING account with no saved wallet, so no current user's cards
+       change. This closes the product-behavior half of POLISH_SPEC HIGH-3. */
     var emptyWallet = heldIds.length === 0;
     var statsBlock = emptyWallet
       ? '<div style="margin-top:18px;padding:22px 18px;border-radius:14px;background:rgba(255,255,255,.07);border:1px dashed rgba(250,246,236,.30);text-align:center">'+
@@ -4247,6 +4248,35 @@
     try { return localStorage.getItem(k) === "free"; } catch (e) { return false; }
   }
   function choosePlanFree(){ var k = planKey(); if (k){ try { localStorage.setItem(k, "free"); } catch (e) {} } render(); }
+
+  /* ---- New-account wallet default (ruling jr-20260822-hitchpass-wallet-empty-account-scoped) ----
+     A brand-new signup starts with an EMPTY wallet so it lands on the designed zero-state
+     (POLISH_SPEC HIGH-3 / FL-H3) instead of inheriting the ["tt","enc"] seed as if it had
+     already told us something.
+
+     This is ACCOUNT-SCOPED, never device-scoped. Three properties make that true:
+       1. The only caller is the signUp success path — an account that merely SIGNS IN never
+          reaches this code, so an existing user's cards cannot be read or written by it.
+       2. The one-shot marker lives in a per-user-id namespace, the same shape planKey() uses
+          ("hp_wallet_init:<uid>"), so it can never be confused for another account's marker.
+       3. It is idempotent per user id: once marked, a re-render, a duplicate auth callback or
+          a later sign-in can never re-clear a wallet the new user has since filled in.
+     Only state.wallet is reset — trips, favorites, profile and stays are left alone.
+
+     NOTE (transfer debt T-2, deliberately NOT fixed here): state.wallet still lives in the
+     single global unscoped `hitchpass.v1` key. On a shared device a new signup therefore
+     replaces the visible wallet rather than getting its own namespace. That is a pre-existing
+     architecture debt carded separately; note this change strictly improves its symptom, since
+     today a new signup on a shared device SEES the previous account's cards. */
+  function walletInitKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_wallet_init:" + u.id) : null; }
+  function applyNewAccountWallet(){
+    var k = walletInitKey(); if (!k) return false;
+    try { if (localStorage.getItem(k)) return false; } catch (e) { return false; }   // already initialised for this account — never re-run
+    state.wallet = [];
+    persist();
+    try { localStorage.setItem(k, "new"); } catch (e) {}
+    return true;
+  }
   /* Email + password auth. Log in or create account (Confirm-email is OFF, so signUp returns a session
      immediately — no verification email). Errors are surfaced inline; nothing fails silently. */
   function authPassword(){
@@ -4264,7 +4294,7 @@
       if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; render(); return; }
       a.password = ""; a.error = "";
       if (isSignup){ track("sign_up", { method: "email" }); justSignedUp = true; }   // conversion: new account created — arm the install nudge for this session
-      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); if (isSignup) maybeShowInstall(); }   // last step of signup: offer Add-to-Home-Screen before plan selection
+      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; if (isSignup) applyNewAccountWallet(); refreshSubscription(); if (isSignup) maybeShowInstall(); }   // new account: empty wallet -> designed zero-state (account-scoped); then offer Add-to-Home-Screen
       render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
     }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
   }
