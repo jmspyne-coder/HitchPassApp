@@ -3367,7 +3367,7 @@
     var union = heldIds.reduce(function(s,id){ return s + (isMembershipNet(id) ? 0 : (NETWORKS[id].count||0)); }, 0);
     var chips = held.length
       ? held.map(function(n){ return '<span class="chip">'+n.short+'</span>'; }).join("")
-      : '<span style="color:#cdbfa6;font-size:12px">No cards yet — add them in Profile</span>';
+      : "";   /* FL-H3: the designed empty-state card below now carries this message + CTA */
     // Park-count cards show the number; membership-only cards (hh/pa/gs) show a uniform badge.
     var stats = heldIds.map(function(id){
       var n = NETWORKS[id];
@@ -3377,6 +3377,24 @@
       return '<div class="stat">'+headEl+'<div style="color:#cdbfa6;font-size:13px;margin-top:8px">'+esc(n.name)+'</div></div>';
     }).join("");
     var statCols = heldIds.length>1 ? "1fr 1fr" : "1fr";
+    /* FL-H3: a wallet with no cards used to render an empty stats grid plus a 12px
+       "No cards yet" line -- technically an empty state, visually a blank. This is the
+       first screen for practically every new user, so it gets a designed zero-state:
+       icon, headline, one honest line, one CTA into Profile. Mirrors the Trips empty
+       state (see "No trips saved yet"). NOTE: this does NOT change the ["tt","enc"]
+       signup default -- that is the product-behavior half of POLISH_SPEC HIGH-3, it is
+       still flagged for Jim, and it is deliberately NOT decided here. Consequence: new
+       signups do not land on this screen; it is reached by clearing your cards in
+       Profile. Making it the new-user default is Jim's call (see POLISH_SPEC HIGH-3). */
+    var emptyWallet = heldIds.length === 0;
+    var statsBlock = emptyWallet
+      ? '<div style="margin-top:18px;padding:22px 18px;border-radius:14px;background:rgba(255,255,255,.07);border:1px dashed rgba(250,246,236,.30);text-align:center">'+
+          '<div style="width:46px;height:46px;margin:0 auto;border-radius:13px;background:rgba(255,255,255,.14);display:grid;place-items:center">'+ic("plus",24,"#faf6ec")+'</div>'+
+          '<div class="disp" style="color:#faf6ec;font-size:17px;font-weight:800;margin-top:10px">Add your memberships</div>'+
+          '<div style="color:#cdbfa6;font-size:13px;line-height:1.55;margin-top:6px">Tell Hitch Pass which networks you belong to \u2014 your parks, booking windows and 21-day clock all key off this.</div>'+
+          '<button class="btnO tap" data-act="nav" data-arg="profile" style="margin:15px auto 0;max-width:230px">Add my memberships</button>'+
+        '</div>'
+      : '<div style="display:grid;grid-template-columns:'+statCols+';gap:10px;margin-top:18px">'+stats+'</div>';
     function tile(name,color,title,sub,arg){
       return '<button class="tile tap" data-act="nav" data-arg="'+arg+'">'+
         '<div class="tileIc" style="background:'+color+'">'+ic(name,22,"#faf6ec")+'</div>'+
@@ -3405,10 +3423,10 @@
           '</div>'+
           '<button class="tap" data-act="share" aria-label="Share" style="width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center">'+ic("share",19,"#faf6ec")+'</button>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:'+statCols+';gap:10px;margin-top:18px">'+stats+'</div>'+
+        statsBlock+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px">'+
-        tile("compass",C.pine2,"Explore parks",union+" locations","explore")+
+        tile("compass",C.pine2,"Explore parks",(emptyWallet ? "Browse all parks" : union+" locations"),"explore")+
         tile("percent",C.green,"Free in my wallet","$0 only","explorefree")+
         tile("calendar",C.pine,"Booking dates","When to book","trips")+
         tile("pin",C.ember,"Coverage &amp; savings","Pitch tool","tools")+

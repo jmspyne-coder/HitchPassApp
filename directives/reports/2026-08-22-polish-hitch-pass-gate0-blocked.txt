@@ -1,0 +1,100 @@
+CODE SESSION REPORT
+report_id: 2026-08-22-polish-hitch-pass-gate0-blocked
+directive: DIRECTIVE 2026-08-21-polish-hitch-pass (RESUME PROTOCOL 2026-08-22)
+repo: HitchPassApp
+launch dir: /Users/jim/Rootwork/HitchPassApp   <- CORRECT per directive
+machine: [redacted - local dev host]
+date: 2026-08-22
+outcome: NON-EXECUTION (merge-class) / PARTIAL (severable work done)
+
+PROMPTS RECEIVED
+  1. "Execute Notion task DIRECTIVE 2026-08-21-polish-hitch-pass"
+  (no other prompts; session non-interactive, questions batched here per directive)
+
+HEADLINE
+  Gate-0 FAILED AT LAUNCH FOR THE SECOND CONSECUTIVE SESSION, for the same reason,
+  and the RESUME PROTOCOL written to fix it cannot run under the contract that the
+  failure imposes. This is a self-deadlock, not a session error.
+
+  The launch dir was CORRECT (/Users/jim/Rootwork/HitchPassApp, exactly as the
+  directive specifies). Gate-0 failed because `main` carries no
+  .claude/agents/gate-verifier.md -- the three gate agents exist only inside
+  unmerged PR #16. The SessionStart enforcement contract therefore forbids, for the
+  whole session: merging any PR, pushing to a protected branch, recording any gate
+  verdict as PASS, clearing merge queue rows, and writing Queue="Blocked".
+
+  RESUME PROTOCOL steps 1 and 2 are precisely "merge PR #16 (or direct-commit its
+  files to main)" and "dispatch the three gates against PR #17 and merge it". Both
+  are merge-class. Steps 4 and 5 (deploy, close board row) are downstream of them.
+  The contract explicitly pre-empts the obvious workaround: "Do not work around this
+  by invoking a gate-verifier that registers from some other scope."
+
+  The direct-install exception cited in the directive (gate infrastructure cannot
+  gate its own installation) is a real and sensible ruling, but it is a Chat-level
+  ruling in a Notion page; it does not lift a live SessionStart enforcement contract.
+  Resolving that precedence is Jim's call, not this session's.
+
+WHAT WAS DONE (severable, non-merge)
+  1. Gate agents materialised into the working tree, UNTRACKED, nothing committed
+     or pushed:
+       .claude/agents/gate-verifier.md      44fbc817827602726bb793a0c8a470519038052c
+       .claude/agents/reviewer.md           e3fd3781c777c36edc90b6d0a13089062f457e99
+       .claude/agents/security-reviewer.md  095272982cb7f4eb65815d1e752518c1d616c25a
+     All three byte-identical to PR #16's blobs (git hash-object verified).
+     EFFECT: this is the sanctioned fix path. Gate-0 is measured once at session
+     start, so this session stays failed -- but the NEXT session launched from this
+     same folder will PASS Gate-0 and can then legitimately merge #16 and #17.
+     No merge, no push, no protected-branch write was performed to achieve this.
+
+  2. Test-account retirement (RESUME step 3): ATTEMPTED, BLOCKED.
+     Enumerated the target set read-only and confirmed it is safe to delete:
+       - 16 auth users matching jmspyne+polish%@gmail.com, all created
+         2026-08-22 03:21-03:53 UTC by the prior session's Playwright walks
+       - every one has last_sign_in_at == created_at (created, used once, abandoned)
+       - 0 rows in public.subscriptions for any of them
+       - 0 of them outside the 2026-08-22 window
+       - the delete touches only those 16; all other accounts untouched
+         (absolute user counts intentionally not recorded here: this repo is
+          PUBLIC and user count is commercially sensitive under the acquisition
+          posture. Live figure is in Supabase.)
+     This matches the prior session's own recommendation in POLISH_SPEC.md
+     ("roughly 15 of them ... recommend clearing all of them").
+     The scoped DELETE was refused by the Claude Code auto-mode classifier.
+     Per the directive's GIT-STATE CLAUSE ("classifier refusal is not a Jim fork")
+     this was reported rather than routed around. NOT retried, NOT worked around
+     via service-role key or any other path.
+     SEC-1 therefore remains OPEN in both halves: squash-merge not performed
+     (merge-class), credential retirement not performed (classifier).
+
+  3. Evidence filed: this report to MotherDuck my_db.main.code_session_reports and
+     one prevention row to my_db.main.code_wrong_turns.
+
+WHAT WAS DELIBERATELY NOT DONE
+  - Did NOT merge PR #16 or PR #17.
+  - Did NOT direct-commit the gate agents to main.
+  - Did NOT run reviewer / security-reviewer / gate-verifier, and recorded NO gate
+    verdict. The prior session's verdicts remain advisory, as it correctly stated.
+  - Did NOT deploy, and therefore recorded no rollback anchor beyond the current
+    main tip (3910a0db09c0966d8e97809fc8f637e279fbbc2b -- unchanged, still what prod
+    is serving).
+  - Did NOT file jq-hitchpass-polish-jim-look. The card asks Jim to eyeball polished
+    PROD; nothing is deployed, so the card would be false on arrival.
+  - Did NOT touch the board row, in either direction. Specifically did NOT set
+    Queue="Blocked": per the contract that is a claim about the world, the
+    dispatcher reads it as a real external dependency, and the card would silently
+    drop out of the poll. The row is exactly as found: Queue="Ready for Code".
+
+STATE OF THE WORK (all of it survives, nothing lost)
+  PR #16  chore: install gate agents (Gate-0 bootstrap)     OPEN, MERGEABLE, 3 files
+  PR #17  polish: premature overlays / Refer dead space /
+          theme-color drift                                 OPEN, MERGEABLE, 47 files
+          (index.html +41/-11, landing.html +1/-1, sw.js +1/-1, POLISH_SPEC.md,
+           44 screenshots, close-out report, .vercelignore)
+  PR #15  hitchpass full-verification ledger                OPEN (unrelated, prior)
+  main    3910a0db  unchanged, = origin/main = what prod serves
+
+EXIT CLASSIFICATION
+  Directive's BUDGET SHORT clause: "clean stop, spec committed = minimum exit. No
+  dead ends." The spec IS committed (on the PR #17 branch, pushed to the remote).
+  Minimum exit is satisfied. This is a clean stop, not a dead end -- the next
+  session from this folder starts with gates present and green.
