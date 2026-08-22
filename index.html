@@ -4258,7 +4258,10 @@
   }
   /* "Has this user chosen a plan?" — paid (active sub) OR a per-user local free flag. */
   var signupInFlight = false;   // true between calling sb.auth.signUp() and its settlement; makes the SIGNED_IN-vs-signUp() ordering irrelevant (see syncAccountWallet)
-  var newAccountIds = {};       // uids created by signUp in THIS page session; lets a late-arriving session still be recognised as new
+  var newAccountIds = {};       // uids created by signUp in THIS page session; lets a late-arriving session still be recognised as new.
+                                // In-memory only: it does NOT survive a page load, so this does not make the empty-wallet default
+                                // safe if email confirmation is ever turned back on (the confirm link is a new page load).
+                                // Email confirm is OFF and CLAUDE.md forbids reintroducing it; if that ever changes, this needs a durable marker.
   function planKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_plan_choice:" + u.id) : null; }
   function hasChosenPlan(){
     if (!FEATURES.SHOW_PLAN_CHOICE) return true;   // Go-Free: no plan gate — everyone is "in" the moment they sign in
@@ -4296,11 +4299,23 @@
              of a keyless existing account's cards. The snapshot above is taken before auth runs and
              is never overwritten, so even a later persist() by the new account cannot destroy it.
 
-     RESIDUAL, stated plainly because it cannot be engineered away: a legacy blob records no owner, so
-     on a shared device the first existing account to sign in claims it. Nothing on the device says
-     whose cards they are, and preserving them at all is the point of the migration. It is bounded to
-     one account per device, and it matches what production does today — that account already sees
-     those cards on this device. Every account after the first gets DEFAULT_WALLET instead.
+     RESIDUALS, stated plainly because they are real and none of them can be fully engineered away.
+     Each one's worst outcome is DISCLOSURE (an account seeing cards that are not its own) and matches
+     what production does today, where every account on a device sees that device's cards:
+       - A legacy blob records no owner, so on a shared device the FIRST existing account to sign in
+         claims it. Nothing on the device says whose cards they are, and preserving them at all is the
+         point of the migration. Under sequential sign-in this is one account per device; every account
+         after the first gets DEFAULT_WALLET.
+       - That claim is NOT atomic. The check at legacyClaimedBy() and the write below it are separate
+         localStorage operations, and localStorage offers no compare-and-set in any browser. Two tabs
+         signing two different keyless accounts in at genuinely the same moment can both read an
+         unclaimed slot and both adopt it. The window is the few microseconds between those adjacent
+         synchronous statements, but it is not zero, and "one account per device" is therefore a
+         sequential-access property, not a hard guarantee.
+       - The snapshot write at LEGACY_WALLET_KEY is wrapped in a catch that swallows a throwing
+         setItem (quota exhausted, private mode). If it is skipped, a keyless account shows
+         DEFAULT_WALLET for that session and recovers on a later load with working storage; if storage
+         frees up before the next account persists, those cards are lost. Narrow, but not impossible.
 
      SCOPE: wallet only. trips / favorites / profile / membership / stays / tier / watch all still
      share the one global key, so transfer debt T-2 is NOT closed here and stays carded. */
