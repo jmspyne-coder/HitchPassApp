@@ -3197,7 +3197,7 @@
   state.tier = engineTierFor(state.membership.tier);   // engine tier always derived from the catalog selection
   /* Set the member's catalog tier; keep the engine tier (booking math) in sync. */
   function setMembershipTier(key){ if (!MEMBERSHIP_TIERS[key]) return; state.membership.tier = key; state.tier = engineTierFor(key); persist(); }
-  function persist(){ save({ wallet:state.wallet, trips:state.trips, favorites:state.favorites, profile:state.profile, tier:state.tier, membership:state.membership, stays:state.stays, watch:state.watch }); }
+  function persist(){ save({ wallet:state.wallet, trips:state.trips, favorites:state.favorites, profile:state.profile, tier:state.tier, membership:state.membership, stays:state.stays, watch:state.watch }); writeAccountWallet(); }   // wallet is ALSO written to the signed-in account's own key (see walletKey); no-op when signed out
   function isFav(id){ return !!(state.favorites && state.favorites.indexOf(id)>=0); }
 
 
@@ -3383,10 +3383,10 @@
        icon, headline, one honest line, one CTA into Profile. Mirrors the Trips empty
        state (see "No trips saved yet"). REACHED BY: a brand-new signup (ruling
        jr-20260822-hitchpass-wallet-empty-account-scoped -- see applyNewAccountWallet(),
-       which empties the wallet for a newly created account only, account-scoped), or any
-       user clearing their cards in Profile. The ["tt","enc"] literal above remains the
-       default for an EXISTING account with no saved wallet, so no current user's cards
-       change. This closes the product-behavior half of POLISH_SPEC HIGH-3. */
+       which starts a newly created account with its own empty per-user wallet), or any
+       user clearing their cards in Profile. The ["tt","enc"] literal above is now only the
+       signed-out / pre-migration device default; a signed-in account reads its own wallet
+       key. This closes the product-behavior half of POLISH_SPEC HIGH-3. */
     var emptyWallet = heldIds.length === 0;
     var statsBlock = emptyWallet
       ? '<div style="margin-top:18px;padding:22px 18px;border-radius:14px;background:rgba(255,255,255,.07);border:1px dashed rgba(250,246,236,.30);text-align:center">'+
@@ -4090,8 +4090,8 @@
   function initAuth(){
     if (!sb) return;
     // getSession reads the cached session from local storage (NO network) → offline-safe entry.
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); render(); }).catch(function(){ state.authChecked = true; render(); });
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; syncAccountWallet(); refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); render(); }).catch(function(){ state.authChecked = true; render(); });
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ syncAccountWallet(); refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
     // Returning from Stripe Checkout: the webhook writes the row a few seconds AFTER redirect, so show a
     // "Confirming…" screen and poll until the row lands — instead of dropping the user back on the plan page
     // (which reads like the payment failed even though it succeeded).
@@ -4240,6 +4240,7 @@
     }).catch(function(){ a.busy = false; a.error = "Couldn’t open the billing portal."; render(); });
   }
   /* "Has this user chosen a plan?" — paid (active sub) OR a per-user local free flag. */
+  var signupInFlight = false;   // true between calling sb.auth.signUp() and its settlement; makes the SIGNED_IN-vs-signUp() ordering irrelevant (see syncAccountWallet)
   function planKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_plan_choice:" + u.id) : null; }
   function hasChosenPlan(){
     if (!FEATURES.SHOW_PLAN_CHOICE) return true;   // Go-Free: no plan gate — everyone is "in" the moment they sign in
@@ -4249,34 +4250,60 @@
   }
   function choosePlanFree(){ var k = planKey(); if (k){ try { localStorage.setItem(k, "free"); } catch (e) {} } render(); }
 
-  /* ---- New-account wallet default (ruling jr-20260822-hitchpass-wallet-empty-account-scoped) ----
-     A brand-new signup starts with an EMPTY wallet so it lands on the designed zero-state
-     (POLISH_SPEC HIGH-3 / FL-H3) instead of inheriting the ["tt","enc"] seed as if it had
-     already told us something.
+  /* ---- Per-account wallet (ruling jr-20260822-hitchpass-wallet-empty-account-scoped) ----
+     POLISH_SPEC option (a): the wallet is namespaced per Supabase user id, exactly the way
+     planKey() namespaces plan choice. Two consequences, both required by the ruling:
+       - A brand-new signup has no wallet of its own, so it starts EMPTY and lands on the
+         designed zero-state (FL-H3).
+       - No account can ever write over another account's cards, because each account's wallet
+         lives at its own key. Scoping the marker alone was NOT enough: the earlier cut zeroed
+         the shared `hitchpass.v1` blob, which permanently destroyed a previous account's cards
+         on a shared device (and `[] || ["tt","enc"]` returns `[]`, so it did not even fall back
+         to the seed). Both gates failed that, correctly.
 
-     This is ACCOUNT-SCOPED, never device-scoped. Three properties make that true:
-       1. The only caller is the signUp success path — an account that merely SIGNS IN never
-          reaches this code, so an existing user's cards cannot be read or written by it.
-       2. The one-shot marker lives in a per-user-id namespace, the same shape planKey() uses
-          ("hp_wallet_init:<uid>"), so it can never be confused for another account's marker.
-       3. It is idempotent per user id: once marked, a re-render, a duplicate auth callback or
-          a later sign-in can never re-clear a wallet the new user has since filled in.
-     Only state.wallet is reset — trips, favorites, profile and stays are left alone.
+     The global `hitchpass.v1` blob is still written by persist() and is still what a signed-out
+     session reads, so the storage format does not change. For the wallet it is now a mirror of
+     the signed-in account's copy rather than the only copy.
 
-     NOTE (transfer debt T-2, deliberately NOT fixed here): state.wallet still lives in the
-     single global unscoped `hitchpass.v1` key. On a shared device a new signup therefore
-     replaces the visible wallet rather than getting its own namespace. That is a pre-existing
-     architecture debt carded separately; note this change strictly improves its symptom, since
-     today a new signup on a shared device SEES the previous account's cards. */
-  function walletInitKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_wallet_init:" + u.id) : null; }
-  function applyNewAccountWallet(){
-    var k = walletInitKey(); if (!k) return false;
-    try { if (localStorage.getItem(k)) return false; } catch (e) { return false; }   // already initialised for this account — never re-run
-    state.wallet = [];
-    persist();
-    try { localStorage.setItem(k, "new"); } catch (e) {}
+     Migration for existing users is automatic and invisible: the first time an account signs in
+     after this deploy it has no scoped key, so it ADOPTS the wallet already on the device and
+     writes it to its own namespace. Nobody's cards change.
+
+     SCOPE: wallet only. trips / favorites / profile / membership / stays still live in the one
+     global key, so transfer debt T-2 is NOT closed here and stays carded. */
+  function walletKey(){ var u = state.account.session && state.account.session.user; return u ? ("hp_wallet:" + u.id) : null; }
+  function readAccountWallet(){
+    var k = walletKey(); if (!k) return null;
+    try { var raw = localStorage.getItem(k); if (raw === null) return null; var w = JSON.parse(raw); return Array.isArray(w) ? w : null; } catch (e) { return null; }
+  }
+  function writeAccountWallet(){
+    var k = walletKey(); if (!k) return;
+    try { localStorage.setItem(k, JSON.stringify(state.wallet)); } catch (e) {}
+  }
+  /* Every session arrival: load this account's own wallet, or adopt the device wallet the first
+     time (the migration above). Deferred while a signUp is in flight so it can never adopt the
+     seed on behalf of an account that is about to be initialised empty — supabase-js can emit
+     SIGNED_IN before or after signUp() resolves, and this makes that ordering irrelevant. */
+  function syncAccountWallet(){
+    if (signupInFlight) return false;
+    if (!walletKey()) return false;
+    var mine = readAccountWallet();
+    if (mine){ state.wallet = mine; return true; }   // note: an empty array is a real answer, not "missing"
+    writeAccountWallet();
     return true;
   }
+  /* Brand-new account: start empty. Only the signUp path calls this. The account's own key being
+     absent IS the one-shot guard — once written, this can never zero a wallet again, and it can
+     never touch a key belonging to a different user id. */
+  function applyNewAccountWallet(){
+    if (!walletKey()) return false;
+    if (readAccountWallet()) return false;   // this account already has a wallet — never zero it
+    state.wallet = [];
+    writeAccountWallet();
+    persist();
+    return true;
+  }
+
   /* Email + password auth. Log in or create account (Confirm-email is OFF, so signUp returns a session
      immediately — no verification email). Errors are surfaced inline; nothing fails silently. */
   function authPassword(){
@@ -4286,17 +4313,18 @@
     if (!email || !pw){ a.error = "Enter your email and a password."; render(); return; }
     a.busy = true; a.error = ""; render();
     var isSignup = (a.authMode === "signup");
+    if (isSignup) signupInFlight = true;   // hold off syncAccountWallet until we know this account is new
     var op = isSignup
       ? sb.auth.signUp({ email: email, password: pw })
       : sb.auth.signInWithPassword({ email: email, password: pw });
     op.then(function(r){
-      a.busy = false;
-      if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; render(); return; }
+      a.busy = false; signupInFlight = false;
+      if (r && r.error){ a.error = r.error.message || "Couldn’t sign you in."; syncAccountWallet(); render(); return; }   // failed signup: fall back to the normal per-account load
       a.password = ""; a.error = "";
       if (isSignup){ track("sign_up", { method: "email" }); justSignedUp = true; }   // conversion: new account created — arm the install nudge for this session
-      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; if (isSignup) applyNewAccountWallet(); refreshSubscription(); if (isSignup) maybeShowInstall(); }   // new account: empty wallet -> designed zero-state (account-scoped); then offer Add-to-Home-Screen
+      if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; if (isSignup) applyNewAccountWallet(); else syncAccountWallet(); refreshSubscription(); if (isSignup) maybeShowInstall(); }   // new account -> empty wallet -> designed zero-state; existing account -> its own wallet, untouched
       render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
-    }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
+    }).catch(function(){ a.busy = false; signupInFlight = false; a.error = "Network error — try again."; render(); });
   }
   function authToggleMode(){ state.account.authMode = (state.account.authMode === "signup") ? "login" : "signup"; state.account.error = ""; render(); }
   function authSignOut(){
