@@ -126,22 +126,32 @@ bundled when this was deferred:
    into Profile — mirroring the existing Trips empty state. The redundant 12px
    "No cards yet — add them in Profile" hero line was dropped (the card now carries that message),
    and the Explore tile reads "Browse all parks" instead of a bleak "0 locations".
-2. *Making new signups actually reach it* — **BUILT, behind a feature flag.** The first pass
-   built (1) only, and a fresh gate FAILED it: FL-H3's subject is the **new-user** empty state, and
-   with every signup seeded `["tt","enc"]` no new user could ever see the designed screen. A
-   designed-but-unreachable state does not satisfy the criterion. Corrected.
+2. *Making new signups actually reach it* — **NOT BUILT. Parked for Jim's ruling.**
+   This is the genuine product-behavior fork and it stays flagged. A `jim_rulings` probe returned
+   zero prior rulings on it (68 rulings on file, through 2026-08-22 03:03), so it is genuinely
+   unasked rather than already-decided.
 
-   **Implemented differently from this spec's original Option A, deliberately.** Option A proposed
-   flipping the load default (`wallet: saved.wallet || ["tt","enc"]` → `|| []`). That is unsafe:
-   `persist()` runs only on a user action, so an existing user who has never taken one has no
-   stored wallet, and flipping the load default would silently empty their wallet on their next
-   visit — indistinguishable from data loss, for plausibly most of the 61 inactive accounts.
+   **This was attempted in this session and deliberately reverted.** The attempt seeded an empty
+   wallet at account creation behind a `FEATURES.EMPTY_WALLET_ON_SIGNUP` flag. The security gate
+   FAILED it on two independent grounds, both correct:
 
-   Instead the empty wallet is seeded **at account creation** (`authPassword()`, the `isSignup`
-   branch), gated by `FEATURES.EMPTY_WALLET_ON_SIGNUP`. The load default is untouched. Blast
-   radius is exactly "accounts created from this deploy forward"; every existing user is
-   bit-for-bit unaffected. Per the Transferability Standard the behavior is a config flag, so
-   restoring the legacy seeding is a one-word change, not a revert.
+   - **It was a data-loss hazard.** `hitchpass.v1` carries no user namespace, and sign-out clears
+     only `state.account.*` — not the wallet. So the wipe was scoped to the *device*, not the
+     *account*: any successful signup on a device that already held a wallet would zero it. Shared
+     tablet, or one user signing out and a second signing up. The commit claimed "every existing
+     user is bit-for-bit unaffected"; that claim was false, and the gate caught it.
+   - **A feature flag does not confer authority.** Reversibility is not permission. The flag shipped
+     defaulted `true`, which means the product decision shipped. CLAUDE.md's ambiguity gate makes
+     product behavior ask-first, and this is squarely product behavior.
+
+   **The question for Jim, stated plainly:** should a brand-new signup start with an empty wallet
+   (landing on the designed zero-state, choosing their own networks) or keep today's `["tt","enc"]`
+   pre-seed? Recommend empty — the two hero stat tiles currently read as *the user's* data when they
+   are hardcoded network totals. But it is a conversion-affecting call on the first screen of the
+   funnel, so it is not being made unilaterally. **If the answer is "empty," the implementation must
+   be account-scoped, not the device-scoped wipe attempted here** — namespace the wallet per user id
+   (the codebase already does this for plan choice, `planKey()`), or seed only when no wallet exists
+   on the device.
 
 **Correction to an earlier claim in this section:** an interim revision of this spec said the
 designed state "ships dark." That was wrong, and the security gate caught it. `wallet-toggle`
