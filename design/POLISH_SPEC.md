@@ -73,9 +73,11 @@ first one. Every brand-new signup got asked for money, then asked to recruit fri
 anything else in the app.
 
 **Fix (built):** added a 3-day first-use grace period, anchored to a new `hitchpass.firstSeen`
-localStorage timestamp stamped on first check. Both `tipDue()` and `shareDue()` now require
-`pastPromptGrace()` in addition to their existing interval check. Verified live: fresh signup shows
-neither overlay; `hitchpass.firstSeen` is correctly stamped. This is a bug fix against the
+localStorage timestamp stamped on first check. `tipDue()`/`shareDue()` apply the grace period only
+to the never-shown-before case (`!(last>0)`); an existing user already mid-cadence (has a prior
+`*LastShown` timestamp) keeps their original interval check unaffected — verified by simulating a
+20-day-overdue existing user with no `firstSeen` key (predates this deploy) and confirming the
+prompt still fires normally rather than being newly delayed. This is a bug fix against the
 product's own documented intent, not a new product decision — the 3-day figure is my assumption
 (no grace period was specified anywhere); flag if a different number is wanted.
 

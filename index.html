@@ -5145,8 +5145,11 @@
   var TIP_KEY = "hitchpass.tipLastShown";
   var TIP_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
   function tipDue(){
-    try { var last = parseInt(localStorage.getItem(TIP_KEY) || "0", 10);
-      return pastPromptGrace() && (!(last > 0) || (Date.now() - last) >= TIP_INTERVAL_MS); } catch(e){ return true; }
+    try {
+      var last = parseInt(localStorage.getItem(TIP_KEY) || "0", 10);
+      if (!(last > 0)) return pastPromptGrace();   // never shown before: honor the new-user grace period
+      return (Date.now() - last) >= TIP_INTERVAL_MS;   // already shown before: existing cadence, unaffected by the grace period
+    } catch(e){ return true; }
   }
   function markTipShown(){ try { localStorage.setItem(TIP_KEY, String(Date.now())); } catch(e){} }
   var tipBooted = false;   // once per page load
@@ -5155,8 +5158,11 @@
   var SHARE_KEY = "hitchpass.shareLastShown";
   var SHARE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
   function shareDue(){
-    try { var last = parseInt(localStorage.getItem(SHARE_KEY) || "0", 10);
-      return pastPromptGrace() && (!(last > 0) || (Date.now() - last) >= SHARE_INTERVAL_MS); } catch(e){ return true; }
+    try {
+      var last = parseInt(localStorage.getItem(SHARE_KEY) || "0", 10);
+      if (!(last > 0)) return pastPromptGrace();   // never shown before: honor the new-user grace period
+      return (Date.now() - last) >= SHARE_INTERVAL_MS;   // already shown before: existing cadence, unaffected by the grace period
+    } catch(e){ return true; }
   }
   function markShareShown(){ try { localStorage.setItem(SHARE_KEY, String(Date.now())); } catch(e){} }
   var shareBooted = false;
