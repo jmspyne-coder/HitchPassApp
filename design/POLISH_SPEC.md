@@ -310,3 +310,32 @@ per instruction so both get patched.
 
 Branch: `polish/hitch-pass-2026-08-21` (worktree `HitchPassApp-polish`). Not merged, not deployed —
 see close-out report for why.
+
+---
+
+## Security-review remediation (post-PASS/PASS-conditional round)
+
+An adversarial security-reviewer pass on this branch's diff caught two evidence-hygiene defects
+that the initial commit missed:
+
+1. **Live account identifier published to a public repo.** `tab-profile.png` (before/after, both
+   viewports) rendered the "Signed in as" line with a real, plus-tagged Gmail address from a live
+   Supabase-authenticated test account. This repo is public and has no build step (`vercel.json` is
+   crons + one rewrite, static root serve) — merging would have made those PNGs directly fetchable
+   from `hitchpass.vercel.app` as well as GitHub. **Fixed:** re-shot all four `tab-profile.png`
+   files with the email element masked via Playwright's screenshot `mask` option (solid pine-green
+   bar over the address) rather than deleted outright, so the surrounding layout stays intact as
+   evidence.
+2. **`membership-detail.png` didn't depict what its filename claimed.** All four copies (before/
+   after × mobile/desktop) were byte-identical to the Home screen — the stat-tile click documented
+   in MEDIUM-2 does nothing, so there is no distinct membership-detail view to capture. Filename
+   implied evidence that didn't exist. **Fixed:** removed rather than relabeled — MEDIUM-2 above
+   already documents the underlying non-interactivity finding; a placeholder screenshot of Home
+   under a misleading name added no evidence value.
+3. **Added `.vercelignore` excluding `design/`** as defense in depth — the screenshot/spec
+   directory should never be served from the production domain regardless of what's in it,
+   independent of fix #1.
+
+Both fixes verified visually (masked bar fully covers the address in all four re-shot files; no
+other PNG in the set was found to contain an account identifier on inspection during this remediation).
+Pushed as a follow-up commit on this branch.
