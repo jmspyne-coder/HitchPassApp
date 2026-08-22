@@ -185,6 +185,7 @@ was posted to the existing board card instead, Queue left untouched per
 the Gate-0 enforcement contract.
 
 FILED: design/POLISH_SPEC.md (branch polish/hitch-pass-2026-08-21),
-this report (same branch, directives/reports/), Notion board card comment.
-MotherDuck code_session_reports and Drive Code Reports folder: attempted
-after this file is committed; see session transcript for outcome.
+this report (same branch, directives/reports/), Notion board card comment,
+MotherDuck my_db.main.code_session_reports (this report_id, UPDATEd -
+superseded a prior wrong-window non-execution row for the same report_id;
+drive_ok=TRUE), Drive Code Reports folder (convenience copy).
