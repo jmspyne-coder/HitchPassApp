@@ -1,0 +1,204 @@
+DIRECTIVE 2026-08-21-polish-hitch-pass — RESUME PROTOCOL 2026-08-22B (FINAL STEP)
+Session report · 2026-08-22 · report_id 2026-08-22B-polish-hitch-pass
+Launch dir: /Users/jim/Rootwork/HitchPassApp  (pre-paste precondition quoted at session start)
+Authorization: jr-20260822-ungate-internal-omnibus
+Ruling implemented: jr-20260822-hitchpass-wallet-empty-account-scoped
+
+================================================================================
+OUTCOME: PARKED AT THE ROUND CAP ON A SPLIT GATE VERDICT. NOT MERGED, NOT DEPLOYED.
+================================================================================
+The empty-wallet default is BUILT and its two data-destruction defects are closed and
+independently reproduced as closed by both reviewing gates. It is not merged because the
+O-1 gate set did not return unanimously and round cap 3 was reached.
+
+  reviewer .............. PASS
+  security-reviewer ..... PASS  ("does not park, merge may proceed")
+  gate-verifier ......... FAIL  (AC-3 / AC-6 — multi-tab claim race)
+
+Per the card's own pre-adjudicated fork ("GATE FAIL AT CAP: park, remediation card, spec
+stands as backlog"), this parks rather than taking a fourth product-class cut. The decision
+to merge anyway is Jim's and is a one-word answer; everything is staged for it.
+
+--------------------------------------------------------------------------------
+1. CHANGED FILES
+--------------------------------------------------------------------------------
+ON BRANCH feat/new-signup-empty-wallet (PR #21, OPEN, PARKED — head e3916e6):
+  index.html                  per-account wallet (hp_wallet:<uid>), boot-time legacy snapshot,
+                              claim-once migration, sign-out reset, DEFAULT_WALLET constant
+  sw.js                       cache hitchpass-v22 -> hitchpass-v23
+  tools/wallet-init-test.js   NEW. 38-assertion behavioral harness, bodies lifted verbatim
+  design/POLISH_SPEC.md       HIGH-3 status corrected (was stale: "spec only — backlog")
+
+ON main: nothing. No product code merged this session.
+
+--------------------------------------------------------------------------------
+2. VERIFICATION OUTPUT (pasted, not summarized)
+--------------------------------------------------------------------------------
+JS SYNTAX GATE (inline script):
+  inline script blocks: 3
+  /tmp/hp_inline_0.js -> OK
+  /tmp/hp_inline_1.js -> OK
+  /tmp/hp_inline_2.js -> OK
+  sw.js OK
+
+SERVICE WORKER BUMP GATE:
+  3:var CACHE = "hitchpass-v23";        (base main: var CACHE = "hitchpass-v22";)
+
+LOCALSTORAGE KEY GATE:
+  3125:  var KEY = "hitchpass.v1";      (unchanged; migration code included, see syncAccountWallet)
+
+BEHAVIORAL HARNESS (node tools/wallet-init-test.js):
+  ALL TESTS PASS (38 assertions)
+  Regression tests, one per gate finding:
+    M1   migration window — starts with NO scoped keys; keyless account A recovers its real
+         cards after B signs up AND uses the app on the same device
+    M1b  legacy wallet is claimable once; a third account gets DEFAULT_WALLET
+    M2   post-migration shared device — A's cards survive B's signup
+    M3   in-memory carryover — D does not inherit A's cards after sign-out
+
+SUPABASE T-1 ENUMERATION (before deletion attempt):
+  16 rows matching 'jmspyne+polish%', created 2026-08-22 03:21:52 .. 03:53:59 UTC
+  All 12 FKs referencing auth.users are confdeltype='c' (CASCADE) — a plain DELETE leaves no orphans
+
+PROD STATE (unchanged this session):
+  https://hitchpass.vercel.app/  -> HTTP 200
+  var CACHE = "hitchpass-v22";   <- prod still serves v22; nothing deployed
+
+--------------------------------------------------------------------------------
+3. MANUAL TEST SCRIPT FOR JIM  (~2 minutes)
+--------------------------------------------------------------------------------
+NOTHING WAS DEPLOYED, so there is no prod behavior change to check. Production is byte-identical
+to what it was at the start of this session (hitchpass-v22, commit 0caa5d3).
+
+To verify that claim in 30 seconds:
+  1. Open https://hitchpass.vercel.app/sw.js
+     EXPECT: line 3 reads  var CACHE = "hitchpass-v22";
+  2. Hard-refresh https://hitchpass.vercel.app, log in, look at Home.
+     EXPECT: your wallet exactly as before. No change of any kind.
+
+To review the parked work instead (~90 seconds), read PR #21's description:
+  https://github.com/jmspyne-coder/HitchPassApp/pull/21
+It carries the three-cycle review history, the gate split, and the residual in plain language.
+
+--------------------------------------------------------------------------------
+4. ASSUMPTIONS MADE
+--------------------------------------------------------------------------------
+A1. The live instruction is RESUME PROTOCOL 2026-08-22B (top of card), not the CLOSED
+    2026-08-22 protocol below it. The 2026-08-22B block is the only one with open steps.
+A2. Chose POLISH_SPEC option (a) (namespace the wallet per user id) over option (b) (seed only
+    when no wallet exists). Reason: (a) is what the ruling's own words specify, and (b)'s guard
+    would have had to distinguish "device has a persisted wallet" from "device has the seed",
+    which is not reliably observable at the moment of signup on a fresh device.
+A3. Scoped the WALLET only. trips/favorites/profile/membership/stays/tier/watch still share the
+    global key, so T-2 is NOT closed and stays carded, exactly as the card requires. Scoping the
+    wallet does partially overlap T-2; both reviewing gates were told this and neither called it
+    scope creep.
+A4. An existing account signing in on a device whose legacy wallet another account already
+    claimed gets DEFAULT_WALLET (["tt","enc"]). That is what main already gives a signed-in user
+    on a device with no saved wallet — status quo for the value, though the reaching path is new.
+A5. Prod verification needs TWO test accounts, not one: the shared-device regression cannot be
+    demonstrated with a single account. Not created — nothing was deployed to verify against.
+
+--------------------------------------------------------------------------------
+5. ROLLBACK
+--------------------------------------------------------------------------------
+Nothing to roll back: main is untouched by product code and prod was not deployed.
+Rollback anchor recorded before any work (FL-H6):
+    0caa5d3f16d8daf92cc2ef5b21c977419a3e2001  — prod serving hitchpass-v22
+
+To discard the parked work entirely:
+    git push origin --delete feat/new-signup-empty-wallet
+    gh pr close 21
+To resume it:
+    git fetch origin && git checkout feat/new-signup-empty-wallet   # head e3916e6
+
+--------------------------------------------------------------------------------
+6. THE GATE SPLIT — WHAT JIM IS ACTUALLY DECIDING
+--------------------------------------------------------------------------------
+THE FAILING FINDING IS CORRECT AND IS NOT FULLY FIXABLE.
+syncAccountWallet() reads legacyClaimedBy(), then writes the claim. Those are two separate
+localStorage operations, and NO BROWSER OFFERS COMPARE-AND-SET FOR localStorage. Two tabs
+signing in two DIFFERENT keyless accounts at genuinely the same instant can both read an
+unclaimed slot and both adopt the legacy wallet. A write-then-read-back narrows the window to
+two adjacent synchronous statements; it does not close it. No implementation closes it.
+
+WHY IT IS NOT THE SAME CLASS AS THE TWO EARLIER FINDINGS:
+  - Worst outcome is DISCLOSURE — an account seeing the device's existing cards.
+  - main does exactly that TODAY, unconditionally, for every account (the T-2 shared blob).
+  - Nothing is destroyed. The two destruction defects ARE closed, and both reviewing gates
+    reproduced them as closed rather than taking the builder's word for it.
+  - Reaching it needs: two different accounts, both keyless, both first-signing-in, same device,
+    two tabs, within microseconds, during the one-time migration window.
+
+RECOMMENDATION: merge. The residual is strictly no worse than current production behavior, and
+it blocks a change that closes two confirmed unrecoverable-data-loss defects and completes FL-H3.
+Counter-argument, stated fairly: the O-1 contract is a unanimous gate set, and honoring it
+exactly is what made the last three sessions trustworthy. That contract is Jim's to relax.
+
+IF MERGING: squash-merge PR #21, deploy, confirm prod serves hitchpass-v23, then walk the
+prod checks with the Playwright script staged at
+scratchpad/verify-empty-wallet.mjs (covers zero-state, F-3, shared-device regression, migration).
+
+--------------------------------------------------------------------------------
+7. T-1 — SUPABASE TEST-USER RETIREMENT: STILL BLOCKED (third consecutive session)
+--------------------------------------------------------------------------------
+16 users enumerated and confirmed; all 12 dependent FKs are ON DELETE CASCADE, so the delete is
+clean. The scoped DELETE (by explicit id list, not a LIKE predicate) was refused again by the
+Claude Code auto-mode classifier. Per the card's instruction, NOT retried — filing the rule.
+
+THE EXACT ONE-LINE RULE NEEDED (runbook item):
+  This repo has NO .claude/settings.json. Create it with:
+
+  {
+    "permissions": { "allow": ["mcp__claude_ai_Supabase__execute_sql"] }
+  }
+
+  A local .env with a service-role key does not exist either, so the Bash/Admin-API route is not
+  available without Jim first exporting SUPABASE_SERVICE_ROLE_KEY. The MCP rule above is the
+  cheaper remedy.
+
+ALTERNATIVE, ZERO-SETUP: delete them in the Supabase dashboard (Auth > Users, filter
+"jmspyne+polish"). 16 rows, all created 2026-08-22 03:21-03:54 UTC.
+
+NOT URGENT: the address is Jim's own plus-tagged alias, already public in every commit author
+line of this repo. Cleanup debt, not an active leak. ZERO new test accounts were created this
+session (nothing was deployed to test against), so the count is still 16, not 18.
+
+--------------------------------------------------------------------------------
+8. FUNCTION LEDGER
+--------------------------------------------------------------------------------
+FL-H1  before-screenshots, mobile+desktop, filed ............ PASS (prior session, unchanged)
+FL-H2  POLISH_SPEC.md committed, severity-ranked ............ PASS (status corrected this session)
+FL-H3  new-user empty state designed, before/after .......... PARTIAL — designed state shipped in
+       PR #18 and live; the new-signup default that REACHES it is built but PARKED (PR #21)
+FL-H4  PWA basics pass, evidence ........................... PASS (prior session, unchanged)
+FL-H5  paired before/afters for touched screens ............. N/A this session — nothing deployed
+FL-H6  rollback anchor recorded before deploy ............... PASS (0caa5d3; no deploy followed)
+FL-H7  PROMPTS RECEIVED heading in report ................... PASS (below)
+
+--------------------------------------------------------------------------------
+9. PROMPTS RECEIVED
+--------------------------------------------------------------------------------
+Exactly one user prompt was received this session, verbatim:
+
+  "Execute Notion task DIRECTIVE 2026-08-21-polish-hitch-pass"
+
+No further human input was received at any point. Every subsequent turn in this session was
+either a tool result or an automated background-task notification from a gate agent. No
+approval, confirmation, or product ruling was given by Jim during the session; the only product
+authority relied on is the ruling already written on the card
+(jr-20260822-hitchpass-wallet-empty-account-scoped).
+
+--------------------------------------------------------------------------------
+10. OPEN / CARRIED FORWARD
+--------------------------------------------------------------------------------
+- PR #21 parked pending Jim's merge decision (section 6).
+- T-1: 16 Supabase test users await deletion; exact rule in section 7.
+- T-2: hitchpass.v1 is a single global unscoped key. This session scoped the WALLET out of it;
+  trips/favorites/profile/membership/stays/tier/watch remain shared. Still worth its own card.
+- OBS-1 (security gate, low): a throwing setItem silently skips the legacy snapshot. Documented
+  in code this session; no fix attempted.
+- HIGH-4 (21-day clock has no hero treatment) and HIGH-5 (four oranges in prod) remain spec-only.
+- DOC CONFLICT, still unpatched and it bit again this session: the card says "DIRECTIVE =
+  APPROVAL; forks pre-adjudicated"; CLAUDE.md's ambiguity gate says product behavior is ask-first.
+  Worth reconciling one of the two documents.
