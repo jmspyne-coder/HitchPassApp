@@ -4918,14 +4918,22 @@
 
     if (!hasSales){
       return head +
-        '<button class="det tap" data-act="nav" data-arg="profile" style="display:block;text-align:left;cursor:pointer">'+
-          '<div style="display:flex;align-items:flex-start;gap:10px">'+
-            '<span style="color:'+C.ember+';flex-shrink:0;margin-top:1px">'+ic("alert",18,C.ember)+'</span>'+
-            '<div style="font-size:14px;font-weight:700;color:'+C.ink+';line-height:1.45">Add your salesperson’s info in Profile first'+
-              '<div style="font-size:12.5px;font-weight:500;color:'+C.muted+';margin-top:4px">We text the referral straight to them from your phone.</div></div>'+
-            '<span style="margin-left:auto;align-self:center">'+ic("chevron",18,C.muted)+'</span>'+
+        '<div style="padding:0 16px">'+
+          '<button class="det tap" data-act="nav" data-arg="profile" style="display:block;text-align:left;cursor:pointer;width:100%">'+
+            '<div style="display:flex;align-items:flex-start;gap:10px">'+
+              '<span style="color:'+C.ember+';flex-shrink:0;margin-top:1px">'+ic("alert",18,C.ember)+'</span>'+
+              '<div style="font-size:14px;font-weight:700;color:'+C.ink+';line-height:1.45">Add your salesperson’s info in Profile first'+
+                '<div style="font-size:12.5px;font-weight:500;color:'+C.muted+';margin-top:4px">We text the referral straight to them from your phone.</div></div>'+
+              '<span style="margin-left:auto;align-self:center">'+ic("chevron",18,C.muted)+'</span>'+
+            '</div>'+
+          '</button>'+
+        '</div>'+
+        '<div style="padding:14px 16px 0">'+
+          '<div class="tile">'+
+            '<div style="font-size:15px;font-weight:800;color:'+C.ink+'">How this works</div>'+
+            '<div style="font-size:13px;color:'+C.muted+';line-height:1.6;margin-top:-6px">Once your salesperson’s info is saved, fill in your friend’s name and number here. Hitch Pass pre-writes a text from your phone to your salesperson introducing them — you review it before it sends. Nothing goes out automatically.</div>'+
           '</div>'+
-        '</button>';
+        '</div>';
     }
 
     var can = referCanSend();
@@ -5114,6 +5122,22 @@
       '</div></div>';
   }
 
+  /* ---- First-use grace period ----
+     Both the tip jar and the share prompt used "never shown before" as license to show immediately,
+     which fired either overlay in the same session as signup — before a new user had gotten any value
+     from the app. firstSeenAt() stamps once per device on first check and both *Due() functions now
+     require this grace period to have passed, on top of their existing repeat-interval. */
+  var FIRST_SEEN_KEY = "hitchpass.firstSeen";
+  var PROMPT_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+  function firstSeenAt(){
+    try {
+      var v = localStorage.getItem(FIRST_SEEN_KEY);
+      if (!v){ v = String(Date.now()); localStorage.setItem(FIRST_SEEN_KEY, v); }
+      return parseInt(v, 10);
+    } catch(e){ return Date.now(); }
+  }
+  function pastPromptGrace(){ return (Date.now() - firstSeenAt()) >= PROMPT_GRACE_MS; }
+
   /* ---- Tip jar (one-time donations) ----
      A friendly "support this project" prompt shown at most once every 14 days to BOTH Free and Pro.
      The cadence lives in its own localStorage key. The tip is mode:payment in /api/tip — it never
@@ -5122,7 +5146,7 @@
   var TIP_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
   function tipDue(){
     try { var last = parseInt(localStorage.getItem(TIP_KEY) || "0", 10);
-      return !(last > 0) || (Date.now() - last) >= TIP_INTERVAL_MS; } catch(e){ return true; }
+      return pastPromptGrace() && (!(last > 0) || (Date.now() - last) >= TIP_INTERVAL_MS); } catch(e){ return true; }
   }
   function markTipShown(){ try { localStorage.setItem(TIP_KEY, String(Date.now())); } catch(e){} }
   var tipBooted = false;   // once per page load
@@ -5132,7 +5156,7 @@
   var SHARE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
   function shareDue(){
     try { var last = parseInt(localStorage.getItem(SHARE_KEY) || "0", 10);
-      return !(last > 0) || (Date.now() - last) >= SHARE_INTERVAL_MS; } catch(e){ return true; }
+      return pastPromptGrace() && (!(last > 0) || (Date.now() - last) >= SHARE_INTERVAL_MS); } catch(e){ return true; }
   }
   function markShareShown(){ try { localStorage.setItem(SHARE_KEY, String(Date.now())); } catch(e){} }
   var shareBooted = false;
