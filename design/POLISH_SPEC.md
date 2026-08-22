@@ -339,3 +339,31 @@ that the initial commit missed:
 Both fixes verified visually (masked bar fully covers the address in all four re-shot files; no
 other PNG in the set was found to contain an account identifier on inspection during this remediation).
 Pushed as a follow-up commit on this branch.
+
+**A re-review (independent fresh instance) pixel-analyzed the masked files and confirmed the mask
+is a solid, complete rectangle with zero residual glyph pixels in all four, confirmed the deleted
+`membership-detail.png` files were provably byte-identical duplicates (nothing lost), confirmed
+`.vercelignore` is correctly scoped, and swept all 24 unique screenshots (44 files reduce to 24 by
+hash) for any other account identifier — none found.**
+
+**One residual finding that no further commit can close (SEC-1, MEDIUM):** the pre-remediation
+blobs (unmasked `tab-profile.png`, commit `1e5a4dc`) are already pushed to the public GitHub
+remote and reachable by SHA even though the branch tip is clean — a normal merge or rebase-preserving
+merge would carry them into `main`'s permanent history. **This is a decision for whoever runs the
+actual merge, not something fixable from this worktree:**
+1. **Merge this branch with squash-merge**, not a regular merge — keeps the unmasked commit out of
+   `main`'s history entirely.
+2. **Retire the exposed test account** in Supabase project `rhqnsjnmlrshrifewxtr` — squashing does
+   not unpublish an already-pushed blob (GitHub retains unreachable objects by SHA), so the durable
+   fix is disabling the credential, not rewriting git. All test accounts created during this
+   session used the `jmspyne+polish*@gmail.com` alias pattern per the directive's pre-approved
+   testing convention — there are roughly 15 of them from the various signup runs this round, all
+   disposable QA accounts, none carrying real subscription state. Recommend clearing all of them
+   from the Supabase dashboard, not just the one that was exposed.
+3. Optionally, once account is retired, ask GitHub Support to garbage-collect the unreachable
+   objects for full history hygiene — not required for the exposure to be neutralized, since the
+   credential itself will no longer be live.
+
+Not attempted directly in this session: rewriting this branch's pushed history (force-push) and
+deleting live Supabase accounts are both irreversible, dashboard/history-altering actions outside
+a design-polish builder's authority — flagging for Jim rather than acting unilaterally.
