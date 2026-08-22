@@ -1,0 +1,38 @@
+ROLLBACK ANCHOR — DIRECTIVE 2026-08-21-polish-hitch-pass (RESUME PROTOCOL step 4)
+Recorded BEFORE the PR #17 production deploy.  FL-H6.
+
+RECORDED AT: 2026-08-22 (session: resume-protocol execution)
+
+LIVE PRODUCTION DEPLOYMENT AT TIME OF RECORDING
+  deployment id : dpl_4ZiDU4cGhvbePu7HT4cMy1tqnUje
+  url           : hitch-pass-148aktqe7-jims-projects-0ed07d97.vercel.app
+  commit        : 16d53f464e4087ce32ab0a7df270feb5d11582cf
+  commit msg    : chore: install gate agents (gate-verifier, reviewer, security-reviewer) (#16)
+  target        : production      state: READY      isRollbackCandidate: true
+  project       : hitch-pass-app  team: team_A4Y1eegfSDL2HWc1fo1ncaUR (Jim's projects, hobby)
+
+  NOTE: this deployment is code-identical to the app that 3910a0d served — PR #16
+  added only .claude/agents/*.md, which ship nothing to the browser.
+
+PRIOR PRODUCTION DEPLOYMENT (second-level fallback)
+  deployment id : dpl_ADBUKuhq1BGR4HQUxauNqoR1TXph
+  commit        : 3910a0db09c0966d8e97809fc8f637e279fbbc2b
+  isRollbackCandidate: true
+
+LIVE PROD STATE VERIFIED BY curl IMMEDIATELY BEFORE DEPLOY
+  https://hitchpass.vercel.app/sw.js            ->  var CACHE = "hitchpass-v20";
+  https://hitchpass.vercel.app/landing.html     ->  <meta name="theme-color" content="#1f3d2c" />
+  https://hitchpass.vercel.app/  (index)        ->  <meta name="theme-color" content="#E8461E" />
+
+ROLLBACK PROCEDURE
+  Preferred (Vercel instant rollback, no rebuild):
+    Vercel dashboard -> hitch-pass-app -> Deployments -> dpl_4ZiDU4cGhvbePu7HT4cMy1tqnUje
+    -> "Promote to Production"  (or: vercel rollback dpl_4ZiDU4cGhvbePu7HT4cMy1tqnUje)
+  Git-level (reverts the source of truth as well):
+    git revert -m 1 <merge-sha-of-PR-17>   # squash merge -> plain `git revert <sha>`
+    git push origin main                   # Vercel auto-redeploys from main
+  Cache caveat: rolling back returns sw.js to hitchpass-v20. Clients that already
+  installed v21 will NOT downgrade their cache — v20 is an older version string, and
+  the SW only re-caches on a CHANGED string. A rollback therefore needs a FORWARD bump
+  (v22) rather than a revert to v20 if the SW itself is the thing being rolled back.
+  For a pure content rollback this does not matter; noted so nobody is surprised.

@@ -86,7 +86,7 @@ product's own documented intent, not a new product decision — the 3-day figure
 
 ---
 
-## HIGH-3 — The "empty state" is not empty; the real empty state is unreachable (spec only)
+## HIGH-3 — The "empty state" is not empty; the real empty state is unreachable — PARTIALLY BUILT
 
 **Category:** empty states, color/data discipline, first-30-seconds cold read
 **Screens:** Home (`before/mobile/tab-home.png` / `05-wallet-home-empty.png`)
@@ -113,8 +113,31 @@ guessing:**
   "154 parks available across your 2 networks" as one line, not two number-first tiles).
 
 Recommend Option A — it's what "empty state" is supposed to mean, and it's a one-line default
-change plus new markup, low risk. **Not built this round**: changes what every new user sees by
-default, which is squarely inside the ambiguity gate's "product behavior" category.
+change plus new markup, low risk.
+
+**RESOLUTION (2026-08-22 session).** The two halves of Option A are separable, and were wrongly
+bundled when this was deferred:
+
+1. *Building the dead empty-state branch into a designed state* — **BUILT.** This is surface
+   polish, squarely inside the directive's "surface polish only" scope, and required by FL-H3
+   ("new-user empty state is designed (not blank)"). `homeView()` now renders a designed
+   zero-state when the wallet has no cards: a rounded "+" affordance matching the app's `tileIc`
+   language, an "Add your memberships" headline, one honest explanatory line, and a single CTA
+   into Profile — mirroring the existing Trips empty state. The redundant 12px
+   "No cards yet — add them in Profile" hero line was dropped (the card now carries that message),
+   and the Explore tile reads "Browse all parks" instead of a bleak "0 locations".
+2. *Changing the `["tt","enc"]` signup default to `[]`* — **STILL NOT BUILT, still Jim's call.**
+   This is the genuine product-behavior fork and it stays flagged. A `jim_rulings` probe returned
+   zero prior rulings on it (68 rulings on file, through 2026-08-22 03:03), so it is genuinely
+   unasked rather than already-decided.
+
+Because (1) is done, (2) is now a one-line change (`wallet: saved.wallet || ["tt","enc"]` →
+`|| []`) with a designed destination already waiting behind it.
+
+**Evidence note:** the `05-wallet-home-empty.png` files originally committed under this heading
+were byte-identical to `tab-home.png` at both viewports — they depicted the *populated* default
+wallet, not an empty one, because no signup could reach the empty branch. They have been replaced
+with genuine captures of the empty state (reached by forcing `wallet: []`), before and after.
 
 ---
 
