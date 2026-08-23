@@ -1,0 +1,232 @@
+DIRECTIVE 2026-08-23-bf-pr30-land-and-hitchpass-leg — LEG 2 ONLY (HitchPassApp sweep)
+Session report · 2026-08-23 · report_id 2026-08-23-bf-pr30-land-and-hitchpass-leg
+Launch dir: /Users/jim/Rootwork/HitchPassApp
+Authorization: jr-20260822-ungate-internal-omnibus (internal work pre-approved, external held)
+Notion card: DIRECTIVE 2026-08-23-bf-pr30-land-and-hitchpass-leg (id redacted per this repo's redaction convention)
+
+================================================================================
+OUTCOME: LEG 2 (HitchPassApp) GREEN. LEG 1 (best-frand, steps 1-3) NOT EXECUTED —
+OUT OF SCOPE FOR THIS WINDOW. Directive overall status: PARTIAL.
+================================================================================
+The directive specifies two legs in two separate windows: Leg 1 (steps 1-3, best-frand
+PR #30/#32/#34) launches in /Users/jim/best-frand; Leg 2 (step 4, HitchPassApp) launches
+in this repo, "as its own fresh paste after leg 1 stops clean." This session's launch
+directory is /Users/jim/Rootwork/HitchPassApp, so it executed Leg 2 only. Leg 1 was not
+touched — no file in best-frand was read or written this session, and no PR #30/#32/#34
+action was taken. That work needs its own session launched from /Users/jim/best-frand.
+
+--------------------------------------------------------------------------------
+1. CHANGED FILES
+--------------------------------------------------------------------------------
+MERGED TO main (PR #15, squash commit 55bc8bb3a6ccd75b12aa58ac74fb951c91da2989):
+  directives/2026-08-20-hitchpass-full-verification.md       NEW (155 lines, unchanged
+                                                               from original PR content)
+  directives/reports/2026-08-20-hitchpass-full-verification.txt
+                                                               NEW (233 lines; amended twice
+                                                               during this session's gate
+                                                               cycles — see section 4)
+  directives/reports/2026-08-23-bf-pr30-land-and-hitchpass-leg.txt  NEW (this file, added
+                                                               after merge, not part of PR #15)
+
+NOT MERGED — PARKED (PR #21, unchanged this session, head e3916e69):
+  index.html, sw.js, tools/wallet-init-test.js, design/POLISH_SPEC.md — untouched by this
+  session. See section 6.
+
+Application code (index.html, sw.js, api/*, landing.html) — UNTOUCHED this session.
+
+--------------------------------------------------------------------------------
+2. VERIFICATION OUTPUT (pasted, not summarized)
+--------------------------------------------------------------------------------
+GH PR LIST --STATE OPEN, BEFORE:
+  #21  feat(onboarding): per-account wallet — new signups start empty
+  #15  docs(directives): Hitch Pass full-verification ledger + report
+
+GH PR LIST --STATE OPEN, AFTER:
+  #21  feat(onboarding): per-account wallet — new signups start empty   (PARKED, see 6)
+
+PR #15 — O-1 GATE HISTORY (full, including FAIL cycles that drove the fixes):
+  reviewer            PASS   head 435d59b   AC-1..AC-4 all PASS
+  security-reviewer   FAIL   head 435d59b   SEC-A (machine hostname (redacted per this
+                                             repo's convention) published to file content,
+                                             public repo) +
+                                             SEC-B (Notion card UUID, no precedent on main)
+  [fix: amended commit, redacted both lines -> head 36786c9]
+  security-reviewer   PASS   head 36786c9   both strings confirmed absent; amend touched
+                                             only the 2 flagged lines
+  reviewer            PASS   head 36786c9   confirmed only the 2 lines changed, AC-1..AC-4
+                                             still hold
+  gate-verifier        FAIL   head 36786c9   AC-2 FAIL: Notion UUID still live in the PR's
+                                             OWN BODY TEXT (file content was clean, but
+                                             GitHub's default squash-merge pulls the PR
+                                             body into main's history) + Rule B FAIL
+                                             (dispatch missing required LAUNCH CONTEXT
+                                             REPO / PR TARGET REPO lines) + asked-and-
+                                             answered FAIL (report's open item had no
+                                             inline quoted jim_rulings negative probe)
+  [fix: gh pr edit --body to strip the UUID from the PR description;
+        report amended to append an inline jim_rulings negative-probe section -> head 1d734af]
+  reviewer            PASS   head 1d734af   append-only diff confirmed, AC-1..AC-4 hold
+  security-reviewer   PASS   head 1d734af   PR body confirmed clean; appended section
+                                             carries no secret; F-1 noted (GitHub retains
+                                             the pre-redaction body revision in its own
+                                             edit history — not fixable from inside the PR,
+                                             not a hard-stop, flagged for the record)
+  gate-verifier        PASS   head 1d734af   AC-1..AC-4 PASS (fresh re-derivation), Rule B
+                                             PASS, asked-and-answered PASS (jim_rulings
+                                             probe: 0 rows, quoted inline in the artifact),
+                                             card-completeness CANNOT-VERIFY (no
+                                             ops/card_lint.zsh in this repo — non-blocking)
+  --> 3/3 PASS at head 1d734af. Merged.
+
+gate_events rows filed (my_db.main.gate_events, directive=2026-08-23-bf-pr30-land-and-hitchpass-leg):
+  ge-20260823-hp15-security-c1, ge-20260823-hp15-security-c2,
+  ge-20260823-hp15-gateverifier-c1, ge-20260823-hp15-gateverifier-c2,
+  ge-20260823-hp15-reviewer-final, ge-20260823-hp15-merged
+
+MERGE CONFIRMATION:
+  $ gh pr view 15 --repo jmspyne-coder/HitchPassApp --json state,mergedAt,mergeCommit
+  {"mergeCommit":{"oid":"55bc8bb3a6ccd75b12aa58ac74fb951c91da2989"},
+   "mergedAt":"2026-08-23T02:32:51Z","state":"MERGED"}
+
+PROD STATE (unaffected — docs-only merge, but main triggers a Vercel deploy):
+  $ grep -n "var CACHE" sw.js  (local main, post-merge)
+  3:var CACHE = "hitchpass-v22";
+  $ curl -s https://hitchpass.vercel.app/sw.js | grep -n "var CACHE"
+  3:var CACHE = "hitchpass-v22";
+  $ curl -s -o /dev/null -w "%{http_code}\n" https://hitchpass.vercel.app/
+  200
+  No cache-relevant asset changed this session (only directives/ touched) -> SW bump gate
+  N/A, correctly not bumped, prod byte-identical on served surface.
+
+JS SYNTAX / LOCALSTORAGE KEY GATES: N/A this session — zero application code touched.
+
+--------------------------------------------------------------------------------
+3. MANUAL TEST SCRIPT FOR JIM (~90 seconds)
+--------------------------------------------------------------------------------
+Nothing changed on the live app surface. To confirm in 30 seconds:
+  1. Hard-refresh https://hitchpass.vercel.app, log in, look at Home.
+     EXPECT: unchanged from before this session — no visible difference.
+  2. https://hitchpass.vercel.app/sw.js line 3 -> EXPECT "hitchpass-v22" (unchanged).
+
+To review what actually happened, read the two artifacts:
+  - PR #15 (merged): https://github.com/jmspyne-coder/HitchPassApp/pull/15 — docs only.
+  - PR #21 (still open, parked): https://github.com/jmspyne-coder/HitchPassApp/pull/21 —
+    this is the one that needs your decision (section 6).
+
+--------------------------------------------------------------------------------
+4. WHY PR #15 TOOK FIVE GATE CYCLES FOR A DOCS-ONLY CHANGE
+--------------------------------------------------------------------------------
+Not scope creep — each cycle closed a real, distinct finding, and each fix was the minimum
+edit to close it:
+  1. security-reviewer caught a real redaction-invariant violation (a machine hostname and
+     an internal Notion UUID published to file content on a public repo) that this repo's
+     own prior report explicitly established as a checked invariant.
+  2. gate-verifier then caught that the SAME UUID also lived in the PR's own body text (a
+     surface the security-reviewer's file-content-only scan hadn't covered), which would
+     have been written into main's permanent history by GitHub's default squash-merge
+     message regardless of the file-content fix.
+  3. gate-verifier separately enforced two standing repo-wide rules baked into
+     .claude/agents/gate-verifier.md: "Rule B" (every merge-class dispatch must state
+     LAUNCH CONTEXT REPO / PR TARGET REPO lines) and the "asked-and-answered gate" (any
+     open question in an artifact must carry an inline, quoted negative probe against
+     my_db.main.jim_rulings). Both are this session's dispatch failures, not defects in
+     the underlying PR content — fixed by re-dispatching correctly and by appending one
+     probe section to the report.
+None of the five cycles found a defect in the actual audit content (FL-1..FL-123, the
+scorecard, the findings) — that content passed AC-1/AC-3 clean on cycle 1 and was never
+touched.
+
+--------------------------------------------------------------------------------
+5. ASSUMPTIONS MADE
+--------------------------------------------------------------------------------
+A1. This session is Leg 2 only. Leg 1 (best-frand PR #30/#32/#34) requires its own window
+    launched from /Users/jim/best-frand per the directive's explicit launch protocol; this
+    session's launch directory (/Users/jim/Rootwork/HitchPassApp) cannot execute it, and I
+    did not attempt to cd into or act on a different repo.
+2. Squash-merged PR #15 rather than merge-commit, matching this repo's established pattern
+   (see main's history: #17, #18, #19, #20, #22 are all single-squash-commit merges) and
+   the security gate's explicit remediation recommendation.
+3. Filed a jim_queue RULING row for PR #21 (jq-ruling-hitchpass-pr21-multitab-residual)
+   rather than a BLOCKED-JIM row, since the open item is a product/merge judgment call, not
+   console-gated work (the directive reserves BLOCKED-JIM specifically for console-gated
+   items, and confirmed zero such items were surfaced by this sweep).
+4. Did not attempt to re-open or re-litigate PR #21's already-documented three-cycle gate
+   history from the prior session — treated the existing PARKED status and its evidence as
+   settled, and only re-verified the PR's current state (head, open/mergeable) hadn't
+   drifted, plus checked jim_rulings for a new ruling since the last session (none found).
+
+--------------------------------------------------------------------------------
+6. PR #21 — STILL PARKED. THIS IS THE ITEM THAT NEEDS JIM.
+--------------------------------------------------------------------------------
+Unchanged since the 2026-08-22B session report: reviewer PASS, security-reviewer PASS,
+gate-verifier FAIL on an irreducible multi-tab claim race in the empty-wallet migration
+(two tabs signing in two different keyless accounts at the same instant can both adopt the
+legacy wallet snapshot — no browser offers compare-and-set for localStorage, so this cannot
+be engineered to zero). Worst outcome is disclosure, matching what production already does
+unconditionally today via the shared hitchpass.v1 key; nothing is destroyed. The PR's own
+body says "PARKED — do not merge without Jim's go."
+
+Checked my_db.main.jim_rulings before touching this PR:
+  SELECT ruling_id, question, ruling, category, ruled_at FROM main.jim_rulings
+  WHERE lower(coalesce(question,'')) LIKE '%multi-tab%'
+     OR lower(coalesce(question,'')) LIKE '%pr #21%'
+     OR lower(coalesce(question,'')) LIKE '%pr21%'
+     OR lower(coalesce(question,'')) LIKE '%gate split%'
+     OR lower(coalesce(question,'')) LIKE '%wallet%'
+  ORDER BY ruled_at DESC LIMIT 20
+Result: 1 row — jr-20260822-hitchpass-wallet-empty-account-scoped (the earlier, already-
+implemented product-behavior ruling on empty-vs-seeded wallets, which this PR's code
+already satisfies and does not need re-litigating). No ruling exists authorizing a merge
+over the multi-tab residual specifically. Genuinely unasked; routed to jim_queue below.
+
+Filed: jq-ruling-hitchpass-pr21-multitab-residual (my_db.main.jim_queue), options A) merge
+as-is (residual no worse than current prod, closes two real data-destruction defects — this
+is the recommendation already on record from the prior session), B) hold for further
+engineering (gate-verifier has already said no implementation closes this), C) close/
+abandon. Default if silent: stay parked, no merge action taken.
+
+--------------------------------------------------------------------------------
+7. FUNCTION LEDGER (per the directive's own FL rows)
+--------------------------------------------------------------------------------
+FL-1  PR #30 authorized round (best-frand) ................. NOT EXECUTED — Leg 1, out of
+      scope for this window. Needs its own session in /Users/jim/best-frand.
+FL-2  PR #32 / #34 (best-frand) ............................. NOT EXECUTED — same as FL-1.
+FL-3  redaction-structural precondition state ............... NOT STATED — its precondition
+      is "#38 + #30 landed" in best-frand, which this session cannot check or affect (best-
+      frand's repo state wasn't read this session). Leg 1's session must answer this.
+FL-4  HitchPassApp shows a clean or fully-dispositioned `gh pr list --state open` .... MET.
+      Before: 2 open (#21, #15). After: 1 open (#21), fully dispositioned as PARKED with a
+      named reason and a filed ruling request; #15 merged. Output quoted in section 2.
+
+--------------------------------------------------------------------------------
+8. ROLLBACK
+--------------------------------------------------------------------------------
+To revert PR #15's merge (docs-only, no app-code risk, but if wanted):
+    git revert -m 1 55bc8bb3a6ccd75b12aa58ac74fb951c91da2989
+No deploy-relevant rollback needed: prod (hitchpass-v22) is byte-identical to before this
+session; the merge added only directives/ content.
+
+PR #21 was not touched (no merge, no code change) — nothing to roll back there.
+
+--------------------------------------------------------------------------------
+9. PROMPTS RECEIVED
+--------------------------------------------------------------------------------
+Exactly one user prompt was received this session, verbatim:
+
+  "Execute Notion task DIRECTIVE 2026-08-23-bf-pr30-land-and-hitchpass-leg"
+
+No further human input was received during the session.
+
+--------------------------------------------------------------------------------
+10. OPEN / CARRIED FORWARD
+--------------------------------------------------------------------------------
+- Leg 1 (best-frand PR #30 authorized round, PR #32/#34 rebase-and-land, redaction-
+  structural precondition check) is entirely outstanding — needs a fresh session launched
+  from /Users/jim/best-frand.
+- PR #21 parked pending Jim's ruling on jq-ruling-hitchpass-pr21-multitab-residual
+  (my_db.main.jim_queue).
+- HELD-EXTERNAL (per jr-20260822-ungate-internal-omnibus): nothing external was sent,
+  published, or shared this session. Not applicable — this leg had no external-facing step.
+- The Notion card for this directive has NOT been set Done, since only one of its two legs
+  ran. A comment was left on the card noting Leg 2's completion; the card should stay in
+  its current queue state until Leg 1 also lands.
