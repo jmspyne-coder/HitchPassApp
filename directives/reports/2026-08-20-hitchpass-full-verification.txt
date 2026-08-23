@@ -1,0 +1,233 @@
+DIRECTIVE: 2026-08-20-hitchpass-full-verification
+REPO: HitchPassApp
+DATE: 2026-08-20
+MACHINE: (redacted — app-hosted session, VS Code extension)
+NOTION CARD: (redacted)
+
+SESSION NOTE — GATE-0 FAILED FOR THIS SESSION
+This session's launch directory was /Users/jim (not inside a git repo); Gate-0 failed at
+session start and cannot be repaired mid-session. Consequence, per the standing
+enforcement contract: this session may not merge any PR, record a reviewer/security-
+reviewer/gate-verifier verdict as PASS, clear a merge queue row, or write Queue="Blocked"
+on any board card. This did not end up constraining the audit's outcome (see below: zero
+fix PRs were warranted regardless, since almost nothing could be live-exercised to
+generate a verified defect), but is recorded here per the contract's own requirement to
+report the defect in close-out. The repo was cloned fresh to
+/Users/jim/Rootwork/HitchPassApp this session (no local checkout existed before).
+
+TITLE
+Full function-ledger audit of the DEPLOYED Hitch Pass PWA (https://hitchpass.vercel.app),
+run end to end by Code. No pre-existing drafted test plan was found in the repo's own
+tracking (no directives/ tree existed before this session) or on the Business Board. The
+Function Ledger was authored in-session from a full static read of index.html (~556KB
+single-file vanilla-JS PWA), sw.js, landing.html, and the public marketing/legal pages:
+directives/2026-08-20-hitchpass-full-verification.md, FL-1 through FL-123.
+
+STRUCTURAL BLOCKER — READ THIS FIRST (same shape as, but not identical to, the Best Frand
+finding at directives/reports/2026-08-20-bf-full-verification.txt in best-frand, which
+this card's chain named as the method to reuse)
+
+Hitch Pass is architecturally different from Best Frand: there is no server-side session
+gate on the initial page load (Best Frand's /unlock middleware). Hitch Pass is a single-
+file client-rendered SPA — the ENTIRE app, including the login form itself, is built by
+JavaScript at runtime against a Supabase email+password backend
+(SUPABASE_URL=rhqnsjnmlrshrifewxtr.supabase.co, index.html:89-92). This session's
+toolset contains no browser-automation tool capable of executing JavaScript or persisting
+an interactive session (checked via ToolSearch: only WebFetch is available, and WebFetch
+"WILL FAIL for authenticated or private URLs" and does not execute JS at all). Live-
+fetching the production root confirms this concretely: WebFetch against
+https://hitchpass.vercel.app/ returns only the pre-JS static shell (title "Hitch Pass",
+tagline "Your RV membership wallet", the "unofficial" disclaimer) with no login form and
+no app content visible, because the real login screen is built by JS that WebFetch never
+executes.
+
+Consequence: this is a STRICTER blocker than Best Frand's, not a milder one. Best Frand's
+public routes (password screen, health check, 401 responses) were at least visible to
+WebFetch because that app renders server-side/static HTML for the unauthenticated case.
+Here, no interactive function of the app -- not even the login form a user first sees --
+is observable through this session's tooling, authenticated or not.
+
+Per CLAUDE.md's standing rule ("a missing or dead credential is a hard stop after one
+verification attempt -- never a retry loop"): the gating mechanism is Supabase
+email+password, not a shared secret env var, so the closest equivalent check is whether
+this session's environment holds a usable Hitch-Pass test-account credential or Supabase
+key beyond the public anon key already embedded in the client bundle. One check was made:
+`grep -oE '^HITCHPASS[A-Z_]*|^SUPABASE[A-Z_]*' ~/.env` (key names only) -- refused at the
+permission/sandbox layer before it could run (the whole compound command was denied). Not
+retried, no alternate credential store probed (did not check the Windows QA harness at
+C:\Users\jmspy\hitchpass-qa\ named in CLAUDE.md, did not check Drive, did not ask Jim
+mid-run), per the rule. This is recorded for completeness, but it is NOT the binding
+constraint: even a valid test-account password would not open this gap, because the tool
+that would submit it to a login form (a JS-executing browser) is what's actually missing.
+This is a pure tooling gap, not a credential gap, and it blocks 100% of interactive
+surface, not a subset.
+
+WHAT WAS ACTUALLY EXERCISED LIVE THIS SESSION (12 rows, all public/static surface, all
+fresh WebFetch evidence gathered this session)
+
+FL-112 (production root, no leak): WebFetch https://hitchpass.vercel.app/ -> static shell
+only, title "Hitch Pass", tagline "Your RV membership wallet," "Unofficial - made by a
+customer, not the company" disclaimer. No account data, no login form (JS never ran), no
+leaked authenticated state.
+
+FL-113 (legacy alias): WebFetch https://hitch-pass-app.vercel.app/ -> HTTP 200, same
+title/content as FL-112. Legacy alias still resolves to the same deployment.
+
+FL-114 (manifest.json): WebFetch returns the full JSON verbatim -- name "Hitch Pass",
+short_name "Hitch Pass", theme_color/background_color #E8461E, standalone display,
+4 icon entries (192/512/maskable/svg) all with ?v=2 cache-busting. Matches source.
+
+FL-115 (sw.js): WebFetch confirms CACHE = "hitchpass-v20" (matches sw.js:3 in the repo
+exactly -- no version drift between deployed and source), precached local shell + best-
+effort external precache (Google Fonts, Supabase UMD), network-first navigation with
+cache-fallback, network-first parks.data.json, cache-first for everything else, and an
+offline fallback via the cached index.html shell. Matches source read (FL-98..108).
+
+FL-116 (landing.html): WebFetch confirms headline "Your RV Membership Wallet," multiple
+"Get Started Free" CTAs, "Free forever. No credit card, no catch." pricing line (matches
+the 2026-07-07 go-free pivot in CLAUDE.md), static crawlable marketing content with no
+dynamic elements -- satisfies the AdSense crawlable-content requirement CLAUDE.md
+describes.
+
+FL-117 (robots.txt): WebFetch returns verbatim: "User-agent: *\nAllow: /\n\nSitemap:
+https://hitchpass.vercel.app/sitemap.xml".
+
+FL-118 (sitemap.xml): WebFetch confirms 6 URLs -- homepage (priority 1.0), a welcome page
+(0.9), and 3 guide pages (0.7-0.8): how-thousand-trails-works, thousand-trails-14-day-
+rule, trails-collection-explained.
+
+FL-119 (terms-of-service.html): WebFetch confirms title "Terms of Service -- HitchPass,"
+full 18-section document, last updated June 11 2026, pricing ($4.50/mo annual, $6.50/mo
+monthly) stated, Texas governing law, no errors.
+
+FL-120 (privacy-policy.html): WebFetch confirms title "Privacy Policy -- HitchPass," 15
+sections, CCPA/PIPEDA/Quebec sections present, "does not sell your personal information"
+stated, no errors.
+
+FL-121 (refund-policy.html): WebFetch confirms title "Refund Policy -- HitchPass," "all
+sales are final" / cancel-anytime language, no errors.
+
+FL-122 (guide: thousand-trails-14-day-rule): WebFetch confirms the page accurately states
+"14 consecutive nights maximum" for base Camping Pass with a "seven nights out" rule, and
+"21 consecutive nights" with park-to-park flexibility for Journey/Explore/Adventure --
+this is an exact live match to the code-derived tier rules audited in FL-52
+(index.html:221-248: camping 14-days-in/7-days-out; journey/explore/adventure all
+21-days-in, park-to-park). Cross-check between the deployed public explainer and the
+deployed app's own booking-window math: consistent, no drift found.
+
+FL-123 (/api/tip method gate): WebFetch https://hitchpass.vercel.app/api/tip (bare GET,
+no body) -> HTTP 405 Method Not Allowed. Endpoint exists and correctly rejects the wrong
+HTTP method; POST-body behavior (real tip flow) is unverified (would require a live
+Stripe redirect + browser, out of reach this session, and out of scope regardless per
+EXPLICITLY NOT APPROVED: no real wallet/payment action).
+
+FIXES ATTEMPTED THIS SESSION: NONE.
+Two low-severity, non-functional documentation/product GAPS were surfaced by the static
+read (not defects in working code -- nothing regressed, nothing crashed):
+- FL-15: CLAUDE.md line 40 says "six-tab navigation"; the deployed code defines 7 tabs
+  (Home, Explore, Trips, Refer, Share, Profile, Perks -- index.html:3358-3361). This is a
+  trivial one-line CLAUDE.md correction with zero deploy-surface verification needed (it's
+  a doc fix, not an app-code change) -- ordinarily in-scope as a fix-what-exists change.
+  NOT fixed this session because Gate-0 failed at launch and this session cannot merge any
+  PR regardless of triviality; recorded as a one-line finding for the next session with a
+  passing Gate-0 to land immediately.
+- FL-67 / FL-8 / FL-96 / FL-97: absence of an explicit "booking window expired" state, a
+  password-reset flow, a theme toggle, and data export/import are PRODUCT GAPS (missing
+  features), not defects in existing behavior -- these are findings requiring a Jim
+  decision on whether to build them, explicitly excluded from this session's scope by the
+  card's own "New features; scope is verify-and-fix-what-exists" rule.
+No other candidate defects were identified, because no interactive function could be
+exercised to discover one. Per the audit's own claim-discipline rule, asserting a fix
+against unexercised code would be exactly the "barely vetted" failure mode this audit
+exists to catch -- so nothing beyond the FL-15 doc-mismatch was even attempted.
+
+SCORECARD
+
+| Row | Function | Result | Evidence |
+|---|---|---|---|
+| FL-1..7 | Auth flow (boot, client init, loading gate, login/signup form, mode toggle, submit, sign out) | BLOCKED | Requires JS-executing session |
+| FL-8 | Password-reset flow | FINDING (gap) | Grep confirms absent, index.html |
+| FL-9..12 | Plan-choice screen, checkout-confirm screen, session router | BLOCKED | Requires JS-executing session; plan-choice confirmed dead code via source (FEATURES flag) |
+| FL-13..14 | Invite capture + claim | BLOCKED | Requires JS-executing session |
+| FL-15 | Six-vs-seven-tab doc/code mismatch | FINDING (doc gap, trivial fix not landed -- Gate-0 failed) | index.html:3358-3361 vs CLAUDE.md:40 |
+| FL-16..24 | Tab navigation (Home/Explore/Trips/Refer/Share/Profile/Perks + dispatch) | BLOCKED | Requires JS-executing session |
+| FL-25..50 | Wallet/membership card flows (mandatory row) | BLOCKED | Requires JS-executing session |
+| FL-51..57 | Booking-window/tier-rule computation logic | BLOCKED (source-confirmed only) | Read verified against PERKS matrix self-check, not live-exercised |
+| FL-58..66 | Booking-window clock UI (mandatory row) | BLOCKED | Requires JS-executing session |
+| FL-67 | No explicit "expired" UI state | FINDING (gap) | index.html:4406, no expiry view found |
+| FL-68..80 | Tip/share/install/push/invite prompts | BLOCKED | Requires JS-executing session |
+| FL-81 | Stripe/plan-choice CTAs confirmed dormant | BLOCKED (source-confirmed only) | FEATURES flags, index.html:3137-3142 |
+| FL-82..95 | Portal, settings, calculators, referral, maps, calendar, error states | BLOCKED | Requires JS-executing session |
+| FL-96 | No theme toggle | FINDING (gap) | Grepped, absent |
+| FL-97 | No data export/import | FINDING (gap) | Grepped, absent |
+| FL-98..108 | Service worker logic (content) | PASS (content match); BLOCKED (runtime interception behavior) | See FL-115 below for live content match; live install/activate/fetch-intercept behavior needs a browser |
+| FL-109..111 | Admin/hidden functions, FEATURES flags, iOS UA flag | BLOCKED (source-confirmed only) | No live surface to test against |
+| FL-112 | Production root loads, no leak | PASS | Live WebFetch, quoted above |
+| FL-113 | Legacy alias resolves | PASS | Live WebFetch, quoted above |
+| FL-114 | manifest.json correct | PASS | Live WebFetch, quoted above |
+| FL-115 | sw.js content matches source | PASS | Live WebFetch, quoted above |
+| FL-116 | landing.html correct, crawlable | PASS | Live WebFetch, quoted above |
+| FL-117 | robots.txt correct | PASS | Live WebFetch, quoted above |
+| FL-118 | sitemap.xml correct | PASS | Live WebFetch, quoted above |
+| FL-119 | terms-of-service.html loads | PASS | Live WebFetch, quoted above |
+| FL-120 | privacy-policy.html loads | PASS | Live WebFetch, quoted above |
+| FL-121 | refund-policy.html loads | PASS | Live WebFetch, quoted above |
+| FL-122 | TT 14-day-rule guide matches code | PASS | Live WebFetch, cross-checked against FL-52 |
+| FL-123 | /api/tip rejects bare GET (405) | PASS | Live WebFetch, quoted above |
+
+OVERALL GRADE: **BLOCKED -- 12 of 123 rows closed (12 PASS, 0 FAIL, 0 FIXED, 106 BLOCKED,
+5 FINDING/GAP)**. Not a product-quality verdict: every public/static row tested came back
+clean, and the source-code read found the core booking-window math internally self-
+consistent (FL-52's own self-check) and externally consistent with the app's own public
+explainer content (FL-122). The entire interactive surface -- auth, the six-tabs-vs-seven
+mismatch aside, all wallet flows, the 21-day clock's actual on-screen behavior, tip/share/
+install prompts, and every error state -- is unverified this session for a tooling reason,
+not a discovered defect. This is a smaller fraction closed than Best Frand's 5/27 (about
+19%) vs this session's 12/123 (about 10%), consistent with Hitch Pass's more thoroughgoing
+client-side architecture leaving less server-rendered surface to test statically.
+
+WHAT WOULD CLOSE THE REMAINING 106 BLOCKED ROWS
+Any one of: (a) add a browser-automation MCP tool (e.g. Playwright) to this session's
+toolset, with a way to either create a fresh Supabase test account live (signup requires
+no email confirmation per CLAUDE.md, so a scripted signup would work once a browser can
+submit the form) or use an existing QA credential; (b) point this session at the existing
+Windows QA harness (C:\Users\jmspy\hitchpass-qa\, run-suite.mjs et al.) if it can be made
+reachable from this machine/session; (c) Jim runs the standing 2-minute smoke script from
+CLAUDE.md himself (hard-refresh -> login -> all seven tabs -> add a membership card ->
+reload -> confirm persistence -> tap upgrade, don't complete payment) and pastes results
+back for the record. This report does not recommend one over the others -- that choice is
+Jim's, per the credential/tooling hard-stop rule.
+
+GUARDRAILS HELD
+No credential value read, echoed, or probed beyond the single named-key-pattern check
+(itself denied before running). No fix attempted without live verification capability
+(the FL-15 doc mismatch was found but not landed, since Gate-0 failed this session and no
+PR can be merged regardless of triviality -- see SESSION NOTE above). No spend beyond the
+ordinary metered WebFetch calls listed above (no Stripe checkout initiated, no Supabase
+account created, no push subscription created). Nothing shipped to any external party.
+Board row not marked Queue="Blocked" (forbidden by this session's Gate-0 enforcement
+contract regardless of audit outcome) -- report filed as the correct channel instead.
+
+CHAIN DISPOSITION
+Per the card's own CHAIN: "Scorecard filed (any mix of PASS/FIXED/finding) -> report;
+end." "No further product in the chain is named; do not invent one." Scorecard filed
+above (mixed PASS/BLOCKED/FINDING). Ending after filing per the card's instruction.
+
+FUNCTION LEDGER
+See directives/2026-08-20-hitchpass-full-verification.md for the full FL-1..FL-123
+definition; results tabulated in the scorecard above.
+
+ASKED-AND-ANSWERED PROBE (added at merge-gate time, 2026-08-23, DIRECTIVE
+2026-08-23-bf-pr30-land-and-hitchpass-leg step 4)
+The open item above ("WHAT WOULD CLOSE THE REMAINING 106 BLOCKED ROWS") was checked against
+my_db.main.jim_rulings before this PR was gated for merge:
+  SELECT ruling_id, question, ruling, category, ruled_at FROM main.jim_rulings
+  WHERE lower(coalesce(question,'')) LIKE '%browser%'
+     OR lower(coalesce(question,'')) LIKE '%blocked rows%'
+     OR lower(coalesce(question,'')) LIKE '%hitchpass%'
+     OR lower(coalesce(question,'')) LIKE '%full-verification%'
+     OR lower(coalesce(category,'')) LIKE '%hitchpass%'
+  ORDER BY ruled_at DESC LIMIT 20
+Result: 0 rows. No ruling exists on this question as of 2026-08-23. It remains open and
+deferred to Jim exactly as this report originally stated; nothing here should be read as
+a ruling having been made.
