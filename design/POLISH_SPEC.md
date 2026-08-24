@@ -354,7 +354,9 @@ per instruction so both get patched.
 | MEDIUM-1 Refer tab dead space | **BUILT, verified locally** | `index.html` |
 | MEDIUM-3 SW cache bump | **BUILT** | `sw.js` |
 | HIGH-5 (partial) landing theme-color sync | **BUILT** | `landing.html` |
-| HIGH-1, HIGH-3, HIGH-4, HIGH-5 (full), MEDIUM-2, MEDIUM-4, LOW-1..3 | **Spec only — backlog** | — |
+| HIGH-3 designed zero-state | **BUILT + DEPLOYED** (PR #18) | `index.html` |
+| HIGH-3 new-signup empty-wallet default | **BUILT, PARKED — not merged** (PR #21, ruling `jr-20260822-hitchpass-wallet-empty-account-scoped`) | `index.html` |
+| HIGH-1, HIGH-4, HIGH-5 (full), MEDIUM-2, MEDIUM-4, LOW-1..3 | **Spec only — backlog** | — |
 
 Branch: `polish/hitch-pass-2026-08-21` (worktree `HitchPassApp-polish`). Not merged, not deployed —
 see close-out report for why.
