@@ -5146,7 +5146,7 @@
      from the app. firstSeenAt() stamps once per device on first check and both *Due() functions now
      require this grace period to have passed, on top of their existing repeat-interval. */
   var FIRST_SEEN_KEY = "hitchpass.firstSeen";
-  var PROMPT_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+  var PROMPT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
   function firstSeenAt(){
     try {
       var v = localStorage.getItem(FIRST_SEEN_KEY);
