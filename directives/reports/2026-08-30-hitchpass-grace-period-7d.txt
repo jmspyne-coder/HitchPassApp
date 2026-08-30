@@ -1,0 +1,230 @@
+DIRECTIVE 2026-08-30-hitchpass-grace-period-7d
+Session report · 2026-08-30 · report_id 2026-08-30-hitchpass-grace-period-7d
+Launch dir: /Users/jim/Rootwork/HitchPassApp  (quoted per LAUNCH HEADER precondition)
+Authorization: jr-20260822-ungate-internal-omnibus (pre-approved internal build)
+Ruling implemented: jr-20260830-hitchpass-empty-wallet-noveto-grace-7d
+  ("let's do 7 days" -- printed per RULE "AN ANSWER SPAWNS BUILD WORK" from
+  DIRECTIVE 2026-08-29-jim-question-omnibus, question 5b)
+
+================================================================================
+OUTCOME: GREEN. MERGED AND DEPLOYED TO PRODUCTION.
+================================================================================
+
+--------------------------------------------------------------------------------
+1. CHANGED FILES
+--------------------------------------------------------------------------------
+index.html   line 5149  PROMPT_GRACE_MS: 3 * 24 * 60 * 60 * 1000 -> 7 * 24 * 60 * 60 * 1000
+             Gates both tipDue() (line 5168) and shareDue() (line 5181) via
+             pastPromptGrace() (line 5157) on the "never shown before" branch only --
+             this is the new-user grace window before the tip-jar/share-prompt
+             overlays are allowed to appear for the first time on a device.
+sw.js        line 3     CACHE: "hitchpass-v22" -> "hitchpass-v24"
+             (v23 skipped -- see section 4, assumption A1)
+
+Merged to main: commit 823a261e7dd66ca102265ee831602af7e54a214e
+Rollback anchor (main HEAD before this change): 49084a8380b8abeba485296407845a88add45f1b
+
+--------------------------------------------------------------------------------
+2. VERIFICATION OUTPUT (pasted, not summarized)
+--------------------------------------------------------------------------------
+JS SYNTAX GATE (inline script, extracted lines 84-5690 of index.html):
+  $ node --check /tmp/hp_inline_check.js
+  SYNTAX_OK
+
+  $ node --check sw.js
+  sw.js OK
+
+SERVICE WORKER BUMP GATE:
+  $ grep -n "hitchpass-v" sw.js
+  3:var CACHE = "hitchpass-v24";
+
+LOCALSTORAGE KEY GATE:
+  $ grep -n "hitchpass.v1" index.html
+  3125:  var KEY = "hitchpass.v1";      (unchanged -- this diff touches only
+                                          hitchpass.firstSeen, a separate key)
+
+CONSTANT CHANGE, FILE/LINE CITED:
+  $ grep -n "PROMPT_GRACE_MS" index.html
+  5149:  var PROMPT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+  5157:  function pastPromptGrace(){ return (Date.now() - firstSeenAt()) >= PROMPT_GRACE_MS; }
+
+BOUNDARY BEHAVIOR VERIFICATION (both sides of the 7-day boundary, evidence quoted):
+  Method: extracted the exact shipped lines 5148-5157 of index.html (firstSeenAt(),
+  pastPromptGrace(), the FIRST_SEEN_KEY/PROMPT_GRACE_MS constants -- literal code,
+  not a reimplementation) into a Node script with a mocked localStorage and a fixed
+  Date.now() anchor, then simulated a "first app open" (which is what actually stamps
+  hitchpass.firstSeen -- this constant gates on client first-open, not on the Supabase
+  auth signup moment, so a logic-level boundary test against the shipped function is
+  the correct verification method for this client-side timestamp gate) at four ages:
+
+  6 days old (within window):           pastPromptGrace()=false  (overlay suppressed)
+  6.99 days old (just under boundary):  pastPromptGrace()=false  (overlay suppressed)
+  7 days old exactly (boundary):        pastPromptGrace()=true   (overlay WOULD show)
+  8 days old (past window):             pastPromptGrace()=true   (overlay WOULD show)
+
+  This proves: an account within the 7-day window does NOT see the tip/share overlay;
+  an account at or past 7 days does. >= comparator confirmed correct, no off-by-one.
+
+MERGE GATES (3/3 PASS via O-1, one correction cycle):
+  reviewer .............. PASS  (diff is exactly 2 lines across 2 files, nothing else
+                                  touched, hitchpass.v1 untouched, no Stripe/webhook
+                                  code touched)
+  security-reviewer ..... FAIL then PASS -- round 1 found sw.js cache version "v23"
+                                  collided with open PR #21 (feat/new-signup-empty-wallet),
+                                  which independently claims v23 for different code
+                                  (that branch still has PROMPT_GRACE_MS at 3 days).
+                                  Fixed by bumping to v24; round 2 re-verified the fix,
+                                  confirmed v24 is unclaimed on any branch or in history,
+                                  re-confirmed no credential leak / no scope creep /
+                                  entitlement isolation intact. PASS.
+  gate-verifier (O-1) ... PASS  (FL-1 and FL-2 independently re-derived and re-run,
+                                  not taken on the builder's word; matched exactly)
+
+  Round cap 3: used 2 (round 1 finding was substantive -- a real cache-version
+  collision -- and consumed a round; the re-verify pass was round 2. Cap not
+  exhausted.)
+
+  Non-blocking note carried forward from security-reviewer round 2: PR #21 still
+  claims "hitchpass-v23" and has not shipped it. Recommend PR #21 rebase to v25
+  (not v23) when it lands, so it doesn't reuse an already-burned version string.
+  This is a note for whoever lands PR #21 next, not a defect in this diff.
+
+DEPLOYMENT (Vercel MCP, independent of git push):
+  $ git push origin main
+  49084a8..823a261  main -> main
+
+  Vercel deployment dpl_8ewaCqEuLH4eDZJHVBJTqZvLGXbk: state READY, target production,
+  githubCommitSha 823a261e7dd66ca102265ee831602af7e54a214e, aliased to:
+    hitchpass.vercel.app (canonical)
+    hitch-pass-app.vercel.app (legacy alias)
+    hitchpass.app, gethitchpass.vercel.app, hitchpassapp.vercel.app,
+    tryhitchpass.vercel.app, joinhitchpass.vercel.app
+
+  Live confirmation (WebFetch, cache-busted):
+    https://hitchpass.vercel.app/sw.js?cachebust=grace7d823a261
+    -> var CACHE = "hitchpass-v24";
+
+--------------------------------------------------------------------------------
+3. MANUAL TEST SCRIPT FOR JIM (~90 seconds)
+--------------------------------------------------------------------------------
+This constant only changes when a NEW device/account first sees the tip-jar or
+share-prompt overlay -- it does not change anything for accounts that have already
+seen either overlay once (they keep their existing 14-day / 7-day repeat cadence).
+There is no user-visible change to check on an existing account.
+
+To verify on a fresh synthetic account (per HARD RULES: jmspyne+polish@ convention,
+plus-tagged, never a real third party):
+  1. In a private/incognito window, open https://hitchpass.vercel.app
+  2. Sign up with a new address like jmspyne+grace7d@gmail.com
+  3. Complete onboarding to the main app (Free or Pro, either is fine)
+  EXPECT: no tip-jar or share-prompt overlay appears on this or the next several
+  visits -- it is now gated for 7 days from this first visit, not 3.
+  4. Open browser devtools > Application > Local Storage > hitchpass.firstSeen
+     Note the stored epoch-ms timestamp.
+  EXPECT: (Date.now() - that timestamp) must reach 604800000 (7 days) before either
+  overlay can appear, versus 259200000 (3 days) before this change.
+
+Faster spot-check (no signup needed): open https://hitchpass.vercel.app/sw.js in a
+browser tab -- line 3 should read var CACHE = "hitchpass-v24";, confirming this
+build is live.
+
+--------------------------------------------------------------------------------
+4. ASSUMPTIONS MADE
+--------------------------------------------------------------------------------
+A1. sw.js cache bumped to v24, not v23 (the directive's own repo would have been
+    the "next" version). Reason: security-reviewer round 1 found open PR #21
+    already claims "hitchpass-v23" for unrelated, different code (still on the
+    3-day grace constant). Landing v23 here would have created a cache-version
+    collision -- two different builds serving an identical CACHE string, which
+    defeats the service worker's install/activate cache-bust entirely. Bumped to
+    v24 to keep every shipped version string unique, confirmed unclaimed by any
+    branch or git history before use.
+A2. Verified the grace-period boundary via a logic-level Node test against the
+    exact shipped function code (see section 2) rather than a live end-to-end
+    browser signup, since no browser-automation tool was available in this
+    shell-only session and this constant is gated by a client-side localStorage
+    timestamp stamped on first app load, not by the Supabase signup moment --
+    so a literal "test signup account" does not map onto how this mechanism
+    actually works. Both merge gates (security-reviewer and gate-verifier)
+    independently re-ran this same test themselves rather than trusting the
+    reported output, and both reproduced the identical result.
+A3. This was treated as a merge-class action executable directly by this session
+    (commit + push to main + confirm deploy) rather than handed to Jim, per the
+    session's opening system context: "Merge-class actions are permitted subject
+    to the normal three-gate pass" -- which was completed (reviewer PASS,
+    security-reviewer PASS after one correction cycle, gate-verifier/O-1 PASS).
+
+--------------------------------------------------------------------------------
+5. ROLLBACK
+--------------------------------------------------------------------------------
+Rollback anchor (main HEAD immediately before this session's commit):
+    49084a8380b8abeba485296407845a88add45f1b  -- prod was serving hitchpass-v22
+
+To revert the code:
+    git revert 823a261e7dd66ca102265ee831602af7e54a214e
+    git push origin main
+(Vercel will auto-deploy the revert on push, same as it auto-deployed this change.)
+
+To roll back the live deployment directly without a new commit (Vercel instant
+rollback, if Jim wants prod reverted before a code revert lands):
+    Vercel dashboard > hitch-pass-app project > Deployments > find the deployment
+    for commit 49084a8 (dpl_3r5PN7rfetEEvEMPbTGbCieWtCvK or dpl_4CGP2PoXBBC42qcxeG4f9gFzBu2Q,
+    both READY/production) > Promote to Production.
+
+--------------------------------------------------------------------------------
+6. FUNCTION LEDGER
+--------------------------------------------------------------------------------
+FL-1  constant changed 3->7 days, located and cited by file/line ....... PASS
+      index.html:5149 (cited above, section 2)
+FL-2  behavior verified both sides of the 7-day boundary,
+      evidence quoted ....................................................... PASS
+      (section 2; independently re-run by both security-reviewer and
+      gate-verifier, not taken on the builder's word)
+FL-3  gates 3/3 PASS (product tier, live customer-facing behavior),
+      merged via O-1 ............................................................ PASS
+      (section 2; one correction cycle on security-reviewer, round 2 clean)
+FL-4  deployed with rollback anchor ......................................... PASS
+      (section 2 deployment evidence; section 5 rollback anchor)
+FL-5  report three channels, drive_ok read-back; card Done +
+      Queue cleared as own final write ......................................... PASS
+      Channel 1 (repo/terminal): this file,
+        directives/reports/2026-08-30-hitchpass-grace-period-7d.txt
+      Channel 2 (Drive Code Reports): written to the "Code Reports" Drive folder
+        (id 17uJ-fstg-zzqw9uu8Cs2l29ft2hoLm9m) as
+        2026-08-30-hitchpass-grace-period-7d.txt (Drive file id
+        1QDYki18WSb_8gy99VGCFFF8s0fEIGkIV), read back via the Drive content
+        reader and confirmed content-intact against the repo copy -- every
+        line, number, and code snippet present unchanged (the reader applies
+        its own markdown-escaping/line-break normalization on read, so this
+        is a content match, not a raw-byte comparison)
+      Channel 3 (MotherDuck): my_db.main.code_session_reports row,
+        report_id=2026-08-30-hitchpass-grace-period-7d, drive_ok=true
+      Notion card: Status set to Done, Queue cleared -- this session's own
+        final write, executed after this report file and all three channels
+        above were filed
+
+--------------------------------------------------------------------------------
+7. PROMPTS RECEIVED
+--------------------------------------------------------------------------------
+Exactly one user prompt was received this session, verbatim:
+
+  "Execute Notion task DIRECTIVE 2026-08-30-hitchpass-grace-period-7d"
+
+No further human input was received at any point. Every subsequent turn in this
+session was either a tool result or an automated background-task notification
+from a gate agent. No approval, confirmation, or product ruling was requested or
+given by Jim during the session; the only product authority relied on is the
+ruling already on the card (jr-20260830-hitchpass-empty-wallet-noveto-grace-7d).
+
+--------------------------------------------------------------------------------
+8. OPEN / CARRIED FORWARD
+--------------------------------------------------------------------------------
+- PR #21 (feat/new-signup-empty-wallet) remains open/parked from a prior session,
+  unaffected by this change. It still claims sw.js cache version "hitchpass-v23"
+  in its own branch history -- recommend it rebase to v25 (not v23) when it next
+  lands, since v23 was never shipped but v24 now has been, and reusing v23 would
+  itself collide with nothing live but reusing v24 later would silently fail to
+  cache-bust for users already served this deploy.
+- T-1 (16 Supabase jmspyne+polish test users pending cleanup) and T-2 (hitchpass.v1
+  is a single global unscoped key for everything except the wallet) both carried
+  forward unchanged from prior sessions; out of scope for this directive.
