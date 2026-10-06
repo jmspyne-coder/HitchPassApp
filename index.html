@@ -3123,6 +3123,16 @@
   })();
 
   var KEY = "hitchpass.v1";
+  var FIRST_SEEN_KEY = "hitchpass.firstSeen";
+  /* First app open on this device. Stamped here, before anything can write hitchpass.v1, so the 7-day
+     prompt grace is anchored to the first open and not to sign-in. A device that already holds
+     hitchpass.v1 data but has no stamp is an existing install: stamp 0 so it counts as past the grace. */
+  (function stampFirstOpen(){
+    try {
+      if (localStorage.getItem(FIRST_SEEN_KEY)) return;
+      localStorage.setItem(FIRST_SEEN_KEY, localStorage.getItem(KEY) ? "0" : String(Date.now()));
+    } catch(e){}
+  })();
   function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
   function save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} }
 
@@ -3173,6 +3183,9 @@
     account: { email:"", password:"", authMode:"login", busy:false, error:"", session:null, subStatus:null, payUnavailable:false },  // Supabase auth UI state (Supabase persists the session itself)
     isPaid: false,   // entitlement (isPro) read from Supabase; gates the Pro surfaces (Fix 4)
     upsell: null,    // feature key while the shared Go-Pro overlay is open over the app
+    authOpen: false,       // signed-out visitor opened Create account / Sign in (open front door: the app itself never asks)
+    authRequired: false,   // true when arriving via ?invite=CODE: that flow keeps its sign-in requirement (no "Not now")
+    pendingReminders: false, // user asked to turn on reminders while signed out: finish the turn-on after sign-in
     authChecked: false,   // true once getSession (local-storage, offline-safe) has resolved on boot
     confirmCheckout: false,   // true while polling Supabase for the subscription row after a Stripe checkout return
     confirmTimedOut: false,   // true if that poll window elapsed without the row landing (rare webhook lag)
@@ -3190,6 +3203,7 @@
     sharePrompt: false,  // share prompt overlay open (7-day cadence, offset from the tip jar)
     installPrompt: false // "add to Home Screen" overlay open (14-day cadence, lowest priority)
   };
+  try { if (new URLSearchParams(location.search || "").get("invite")){ state.authOpen = true; state.authRequired = true; state.account.authMode = "signup"; } } catch(e){}   // ?invite=CODE keeps its sign-in requirement
   var mapInstance = null;   // active Leaflet map (Explore → Map); torn down each render
   var mapSearchTimer = null; // debounce for marker refresh while searching in Map mode
   function freshBookingForm(){ return { parkQuery:"", parkId:null, parkName:"", network:"", custom:false, dateIn:"", dateOut:"", confirmation:"", note:"", error:"" }; }
@@ -3227,7 +3241,7 @@
       (color||"currentColor")+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(P[name]||"")+'</svg>';
   }
 
-  var CANONICAL_ORIGIN = "https://hitchpass.vercel.app";
+  var CANONICAL_ORIGIN = "https://hitchpass.app";   /* official address since 2026-10-06; the two vercel.app aliases still serve the app (no redirects: on-device data is per address) */
   function prodURL(){
     var h = location.hostname;
     var bad = !h || h==="localhost" || h.indexOf(".local")>-1 || h.indexOf("claude")>-1 ||
@@ -3250,8 +3264,8 @@
       text: "I use this free app to track my RV membership stays and the 21-day booking clock. Works with Thousand Trails, Passport America, KOA, and more. No ads, no cost.",
       url: shareURL()
     };
-    if (navigator.share){ navigator.share(data).catch(function(){}); }
-    else if (navigator.clipboard){ navigator.clipboard.writeText(data.url).then(function(){ toast("Link copied!"); }, function(){ alert("Link copied: "+data.url); }); }
+    if (navigator.share){ navigator.share(data).then(function(){ track("share_sent", { method: "share_sheet" }); }).catch(function(){}); }
+    else if (navigator.clipboard){ navigator.clipboard.writeText(data.url).then(function(){ toast("Link copied!"); track("share_sent", { method: "copy_link" }); }, function(){ alert("Link copied: "+data.url); }); }
     else { alert(data.url); }
   }
 
@@ -3290,6 +3304,7 @@
      in one tap (on iOS the keyboard surfaces a one-tap Paste chip). Then open the network site. */
   function bookingHandoff(parkName, network){
     var url = (NETWORKS[network] && NETWORKS[network].url) || "";
+    track("book_handoff", { network: network || "" });
     if (parkName && navigator.clipboard){
       try { navigator.clipboard.writeText(parkName); toast("Copied “" + parkName + "” — paste it into the search box on the next screen"); } catch(e){}
     }
@@ -3419,7 +3434,6 @@
           '<div style="flex:1">'+
             '<div class="disp" style="color:#faf6ec;font-size:30px;font-weight:800;line-height:1.04">Hitch Pass</div>'+
             '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">'+chips+'</div>'+
-            '<div style="color:#a9bdab;font-size:12px;margin-top:7px">Independent · unofficial wallet</div>'+
           '</div>'+
           '<button class="tap" data-act="share" aria-label="Share" style="width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center">'+ic("share",19,"#faf6ec")+'</button>'+
         '</div>'+
@@ -3851,7 +3865,7 @@
     var html = head + '<div style="font-size:12.5px;color:'+C.muted+';margin-bottom:6px">'+trips.length+' saved · windows &amp; check-ins tracked</div></div>'+
       bookingDatesSection()+
       '<div style="padding:6px 16px 8px">'+
-      (pushSupported() && !pushOn() ? '<button class="tap" data-act="enable-push" style="width:100%;margin-bottom:10px;padding:11px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("bell",15,"#faf6ec")+'Get booking-window alerts</button>' : '');
+      (!pushOn() && (pushSupported() || iosNeedsHomeScreen()) ? (iosNeedsHomeScreen() ? '<div style="font-size:12.5px;color:'+C.muted+';line-height:1.5;margin-bottom:8px">On iPhone, add Hitch Pass to your Home Screen first. Reminders work only from there.</div>' : '')+'<button class="tap" data-act="enable-push" style="width:100%;margin-bottom:10px;padding:11px;border-radius:11px;background:'+C.green+';color:#faf6ec;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">'+ic("bell",15,"#faf6ec")+'Turn on reminders</button>' : '');
     html += upcoming.map(function(t){ return tripCard(t,false); }).join("");
     if (past.length){ html += '<div class="dlabel" style="margin:14px 2px 8px">Past</div>'+past.map(function(t){ return tripCard(t,true); }).join(""); }
     html += '</div>';
@@ -3943,6 +3957,7 @@
     if (editing){ state.trips = state.trips.map(function(t){ return String(t.id)===String(state.editingTripId) ? rec : t; }); state.editingTripId = null; }
     else { state.trips.push(rec); }
     persist();
+    track("booking_saved");
     refreshPushReminders();
     state.addBooking=false; state.bookingForm=freshBookingForm();
     state.tab="trips"; render();
@@ -4016,6 +4031,7 @@
   /* ---- Web Push: booking-window alerts (installed PWA / Android / desktop; not the TestFlight build) ---- */
   var VAPID_PUBLIC = "BFQJwjf-s67QP4QhudRAqxoSz9x4MFN4ALXQcJnZk-eX-y8_UMlPJ7m6SGg5TXsmx2oyzeVIMhk_MM1KHMIoLo8";
   function pushSupported(){ return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window); }
+  function iosNeedsHomeScreen(){ return iosSafari() && !isStandalone(); }   // iPhone Safari tab: web push only works from the Home Screen app
   function pushOn(){ try { return localStorage.getItem("hp_push_on")==="1"; } catch(e){ return false; } }
   function urlB64ToUint8Array(b64){
     var pad = "=".repeat((4 - b64.length % 4) % 4);
@@ -4051,13 +4067,13 @@
       .then(function(sub){ if (sub) syncPush(sub.toJSON ? sub.toJSON() : sub); }).catch(function(){});
   }
   function enablePush(){
-    if (!pushSupported()){ alert("To get booking-window alerts, add Hitch Pass to your Home Screen first (Share → Add to Home Screen), then turn alerts on from there."); return; }
-    if (!state.account.session){ alert("Sign in first to turn on alerts."); return; }
+    if (!pushSupported()){ alert("To get booking-window reminders, add Hitch Pass to your Home Screen first (Share → Add to Home Screen), then turn reminders on from there."); return; }
+    if (!state.account.session){ if (!sb){ alert("Sign-in is unavailable right now. Try again in a moment."); return; } openAuth("signup", true); return; }   // reminders are the one feature that needs an account
     Notification.requestPermission().then(function(perm){
       if (perm !== "granted"){ alert("Notifications are blocked — enable them for Hitch Pass in Settings to get alerts."); return; }
       navigator.serviceWorker.ready.then(function(reg){
         reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC) })
-          .then(function(sub){ try{ localStorage.setItem("hp_push_on","1"); }catch(e){} syncPush(sub.toJSON ? sub.toJSON() : sub); render(); })
+          .then(function(sub){ try{ localStorage.setItem("hp_push_on","1"); }catch(e){} syncPush(sub.toJSON ? sub.toJSON() : sub); track("reminder_on"); render(); })
           .catch(function(){ alert("Couldn’t turn on alerts. Try again."); });
       });
     });
@@ -4089,8 +4105,8 @@
   function initAuth(){
     if (!sb) return;
     // getSession reads the cached session from local storage (NO network) → offline-safe entry.
-    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); render(); }).catch(function(){ state.authChecked = true; render(); });
-    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); } else { state.upsell=null; unsubscribeRealtime(); } render(); });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
+    sb.auth.getSession().then(function(r){ state.account.session = (r && r.data) ? r.data.session : null; state.authChecked = true; refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); render(); if (!state.account.session) maybeShowTip(); }).catch(function(){ state.authChecked = true; render(); maybeShowTip(); });   // signed-out visitors get the same prompts (signed-in ones get them after entitlement is known)
+    sb.auth.onAuthStateChange(function(_e, session){ state.account.session = session || null; state.authChecked = true; state.isPaid = false; state.account.subStatus = null; if (session){ refreshSubscription(); subscribeRealtime(); maybeClaimInvite(); } else { state.upsell=null; unsubscribeRealtime(); } if (session && state.authOpen){ afterSignIn(); } else { render(); } });   // reset isPaid before re-deriving so one account's Pro can't carry into another session
     // Returning from Stripe Checkout: the webhook writes the row a few seconds AFTER redirect, so show a
     // "Confirming…" screen and poll until the row lands — instead of dropping the user back on the plan page
     // (which reads like the payment failed even though it succeeded).
@@ -4099,7 +4115,7 @@
     }
     // Returning from a successful tip: show a brief thank-you, mark the cadence, and strip the param.
     if (typeof location !== "undefined" && /[?&]tip=thanks/.test(location.search || "")){
-      state.tipToast = true; tipBooted = true; markTipShown();
+      state.tipToast = true; tipBooted = true; promptShownThisLoad = true; markTipShown();
       try { history.replaceState({}, "", location.pathname); } catch(e){}
       setTimeout(function(){ state.tipToast = false; render(); }, 4000);
     }
@@ -4209,6 +4225,21 @@
       }
     }).catch(function(){ beginPoll(); });
   }
+  /* Open the login screen for a signed-out visitor (Profile buttons, or turning on reminders). */
+  function openAuth(mode, forReminders){
+    state.account.authMode = mode; state.account.error = ""; state.authOpen = true; state.pendingReminders = !!forReminders; render();
+  }
+  /* Runs once a session exists. Closes the login screen; if the user came here to turn on reminders,
+     returns to the reminders control (Trips) and finishes the turn-on. Notification permission needs a
+     live tap, so if the tap has expired the control is left in place with a one-line prompt. */
+  function afterSignIn(){
+    var wasOpen = state.authOpen, wantReminders = state.pendingReminders;
+    state.authOpen = false; state.pendingReminders = false;
+    if (!wantReminders){ if (wasOpen) render(); return; }
+    state.tab = "trips"; state.selected = null; state.addBooking = false; render();
+    var active = !!(navigator.userActivation && navigator.userActivation.isActive);
+    if (active) enablePush(); else toast("Signed in. Tap “Turn on reminders” to finish.");
+  }
   function authSubscribe(plan){
     var a = state.account;
     if (!FEATURES.ENABLE_STRIPE_CHECKOUT){ return; }   // Go-Free: paid checkout is off — never hit /api/create-checkout
@@ -4265,7 +4296,7 @@
       a.password = ""; a.error = "";
       if (isSignup){ track("sign_up", { method: "email" }); justSignedUp = true; }   // conversion: new account created — arm the install nudge for this session
       if (r && r.data && r.data.session){ state.account.session = r.data.session; state.authChecked = true; refreshSubscription(); if (isSignup) maybeShowInstall(); }   // last step of signup: offer Add-to-Home-Screen before plan selection
-      render();   // session also arrives via onAuthStateChange → gate routes to plan-choice / app
+      if (state.account.session && state.authOpen){ afterSignIn(); } else { render(); }   // session also arrives via onAuthStateChange
     }).catch(function(){ a.busy = false; a.error = "Network error — try again."; render(); });
   }
   function authToggleMode(){ state.account.authMode = (state.account.authMode === "signup") ? "login" : "signup"; state.account.error = ""; render(); }
@@ -4319,9 +4350,11 @@
         '<div style="font-size:12px;color:'+C.muted+';margin-top:12px;line-height:1.5">Your account is separate from your on-device wallet — nothing syncs yet.</div>'+
         '<button class="btnO tap" data-act="auth-signout" style="margin-top:10px">Sign out</button></div>';
     }
-    // Signed-out is handled by the front-door login (this branch is unreachable in-app); keep a safe note.
+    // Signed out (open front door): an account is only needed for reminders.
     return '<div class="det"><div class="dlabel" style="font-size:12px">Account</div>'+
-      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">You’re signed out. Use the login screen to sign in.</div></div>';
+      '<div style="font-size:12.5px;color:'+C.muted+';margin-top:5px;line-height:1.5">An account is only needed for reminders. Everything else works without one.</div>'+
+      '<button class="btnG tap" data-act="auth-open" data-arg="signup" style="margin-top:10px">Create account</button>'+
+      '<button class="btnO tap" data-act="auth-open" data-arg="login" style="margin-top:8px">Sign in</button></div>';
   }
 
   /* ============================================================================
@@ -5049,13 +5082,16 @@
     var isSignup = (a.authMode === "signup");
     var err = a.error ? '<div style="margin-top:10px;color:#f0a070;font-size:12.5px;font-weight:600;text-align:center;line-height:1.4">'+esc(a.error)+'</div>' : "";
     var fld = 'width:100%;padding:13px 16px;border-radius:12px;border:none;font-size:16px;outline:none;font-family:inherit';
+    var why = state.pendingReminders ? '<div style="color:#faf6ec;font-size:13px;font-weight:700;line-height:1.5;text-align:center;margin-bottom:8px">Reminders need an account so we can send them to you.</div>' : "";
     return frontDoorShell(
+      why +
       '<div style="color:#a9bdab;font-size:13.5px;line-height:1.5;text-align:center;margin-bottom:14px">'+(isSignup ? "Create your account — email and a password." : "Log in with your email and password.")+'</div>'+
       '<input id="fde" data-auth="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="'+esc(a.email)+'" style="'+fld+'" />'+
       '<input data-auth="password" type="password" autocomplete="'+(isSignup?"new-password":"current-password")+'" placeholder="Password" value="'+esc(a.password||"")+'" style="'+fld+';margin-top:10px" />'+
       err +
       '<button class="tap" data-act="auth-submit" style="margin-top:12px;width:100%;padding:13px;border-radius:12px;background:#cf5a26;color:#fff;font-weight:700;font-size:15px"'+(a.busy?" disabled":"")+'>'+(a.busy ? (isSignup?"Creating account…":"Logging in…") : (isSignup?"Create account":"Log in"))+'</button>'+
-      '<button class="tap" data-act="auth-toggle-mode" style="margin-top:12px;width:100%;color:#e0875a;font-weight:700;font-size:13px;background:none">'+(isSignup ? "Have an account? Log in" : "New here? Create an account")+'</button>');
+      '<button class="tap" data-act="auth-toggle-mode" style="margin-top:12px;width:100%;color:#e0875a;font-weight:700;font-size:13px;background:none">'+(isSignup ? "Have an account? Log in" : "New here? Create an account")+'</button>'+
+      (state.authRequired ? "" : '<button class="tap" data-act="auth-close" style="margin-top:4px;width:100%;color:#a9bdab;font-weight:700;font-size:13px;background:none">Not now</button>'));
   }
 
   /* One-time onboarding plan choice — shown to a signed-in user who hasn't chosen yet.
@@ -5143,9 +5179,9 @@
   /* ---- First-use grace period ----
      Both the tip jar and the share prompt used "never shown before" as license to show immediately,
      which fired either overlay in the same session as signup — before a new user had gotten any value
-     from the app. firstSeenAt() stamps once per device on first check and both *Due() functions now
-     require this grace period to have passed, on top of their existing repeat-interval. */
-  var FIRST_SEEN_KEY = "hitchpass.firstSeen";
+     from the app. The first-open stamp (stampFirstOpen, top of file; key FIRST_SEEN_KEY) is written once
+     per device at first app open and both *Due() functions require this grace period to have passed,
+     on top of their existing repeat-interval. */
   var PROMPT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
   function firstSeenAt(){
     try {
@@ -5184,14 +5220,17 @@
   }
   function markShareShown(){ try { localStorage.setItem(SHARE_KEY, String(Date.now())); } catch(e){} }
   var shareBooted = false;
+  /* One prompt per visit (2026-10-06): once the tip prompt or the share prompt has shown in this page
+     load, the other waits for the next page load. Signed-in state no longer gates either prompt. */
+  var promptShownThisLoad = false;
   /* Raise the share prompt only when the tip prompt is NOT taking the stage. Same entry gates as the
      tip jar, plus a hard rule to never overlap the tip prompt or its thank-you toast. */
   function maybeShowShare(){
-    if (shareBooted) return;
-    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout) return;
+    if (shareBooted || promptShownThisLoad) return;
+    if (!hasChosenPlan() || state.confirmCheckout) return;
     if (state.tipPrompt || state.tipToast) return;   // never stack on the tip jar
     if (!shareDue()){ shareBooted = true; return; }
-    shareBooted = true; state.sharePrompt = true; render();
+    shareBooted = true; promptShownThisLoad = true; state.sharePrompt = true; render();
   }
 
   /* Raise the tip prompt once entitlement is known and the main app is visible — never over the front
@@ -5200,15 +5239,17 @@
   function maybeShowTip(){
     if (!FEATURES.SHOW_DONATION_PROMPT){ tipBooted = true; maybeShowShare(); return; }   // donation prompt off -> hand straight to the share prompt
     if (tipBooted){ maybeShowShare(); return; }
-    if (!signedIn() || !hasChosenPlan() || state.confirmCheckout || state.tipToast) return;
+    if (promptShownThisLoad) return;
+    if (!hasChosenPlan() || state.confirmCheckout || state.tipToast) return;
     if (!tipDue()){ tipBooted = true; maybeShowShare(); return; }
-    tipBooted = true; state.tipPrompt = true; render();
+    tipBooted = true; promptShownThisLoad = true; state.tipPrompt = true; render();
   }
   /* POST the chosen amount (cents) to /api/tip and redirect to Stripe Checkout. Sends the auth token
      when signed in (cleaner receipt); the server validates and bounds the amount regardless. */
   function sendTip(cents){
     if (state.tipBusy) return;
     state.tipBusy = true; state.tipError = ""; render();
+    track("tip_started", { amount_usd: cents/100 });
     var a = state.account;
     var headers = { "Content-Type": "application/json" };
     if (a && a.session && a.session.access_token) headers.Authorization = "Bearer " + a.session.access_token;
@@ -5220,8 +5261,7 @@
   }
   function dismissTip(){
     state.tipPrompt = false; state.tipCustomOpen = false; markTipShown(); render();
-    // If share is also due, let it follow after a short beat so the two don't flash together.
-    if (shareDue()) setTimeout(maybeShowShare, 500);
+    // One prompt per visit: the share prompt (if due) waits for the next page load.
   }
   function dismissShare(){ state.sharePrompt = false; markShareShown(); render(); }
 
@@ -5446,12 +5486,13 @@
   function render(){
     var app = document.getElementById("app");
     teardownMap();   // discard any live map before the DOM is replaced (prevents stacking)
-    // FRONT DOOR: when Supabase is available, gate entry on the (locally-cached, offline-safe) session.
-    // - still checking the cached session -> brief branded loading (no flash of the login)
-    // - checked + no session -> the email front-door login (occupies the old passcode-gate slot)
-    // - signed in -> the app.  sb===null (Supabase unreachable) -> never lock out: fall through to the app.
+    // OPEN FRONT DOOR (2026-10-06): the app opens with no sign in. The login screen shows only when a
+    // signed-out visitor asks for it (Create account / Sign in / turn on reminders) or arrives via ?invite=CODE.
+    // - still checking the cached session -> brief branded loading (no flash of signed-out UI)
+    // - checked + no session + auth requested -> the email login screen
+    // - otherwise -> the app.  sb===null (Supabase unreachable) -> never lock out: fall through to the app.
     if (sb && !state.authChecked){ app.innerHTML = authLoadingView(); return; }
-    if (sb && state.authChecked && !signedIn()){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
+    if (sb && state.authChecked && !signedIn() && state.authOpen){ app.innerHTML = frontDoorView(); var fde=document.getElementById("fde"); if(fde) fde.focus(); return; }
     if (sb && state.authChecked && signedIn() && state.confirmCheckout && !state.isPaid){ app.innerHTML = confirmingView(); return; }   // post-checkout: confirming Pro before falling back to plan page
     if (FEATURES.SHOW_PLAN_CHOICE && sb && state.authChecked && signedIn() && !hasChosenPlan()){ app.innerHTML = planChoiceView(); return; }   // one-time onboarding choice (flag OFF in Go-Free: routes straight to the app)
     var body;
@@ -5465,7 +5506,6 @@
     else if (state.tab==="perks"){ body = perksView(); }
     else { body = homeView(); }
     app.innerHTML = '<div class="wrap">'+
-      '<div class="ribbon">'+ic("alert",14,"#e0875a")+'<span>Unofficial · made by a customer, not by Thousand Trails / Encore / ELS · all names are trademarks of their owners</span></div>'+
       '<div class="content">'+(state.inviteMsg?inviteBanner():"")+alertBannersHTML()+body+'</div>'+
       '<div class="footer">Unofficial · made by a customer, not the company</div>'+
       navView()+
@@ -5492,7 +5532,7 @@
     else if (act==="netfilter"){ state.netFilter=arg; state.explorePage=1; render(); }
     else if (act==="freeonly"){ state.freeOnly=!state.freeOnly; state.explorePage=1; render(); }
     else if (act==="favonly"){ state.favOnly=!state.favOnly; state.explorePage=1; render(); }
-    else if (act==="fav-toggle"){ var fid=parseInt(arg,10); var fi=state.favorites.indexOf(fid); if(fi<0) state.favorites.push(fid); else state.favorites.splice(fi,1); persist(); render(); }
+    else if (act==="fav-toggle"){ var fid=parseInt(arg,10); var fi=state.favorites.indexOf(fid); if(fi<0){ state.favorites.push(fid); track("park_saved"); } else state.favorites.splice(fi,1); persist(); render(); }
     else if (act==="regionfilter"){ if (state.regionFilter.has(arg)) state.regionFilter.delete(arg); else state.regionFilter.add(arg); state.explorePage=1; render(); }
     else if (act==="regionall"){ state.regionFilter.clear(); state.explorePage=1; render(); }
     else if (act==="explore-mode"){ if (state.exploreMode!==arg){ state.exploreMode=arg; render(); } }
@@ -5542,10 +5582,13 @@
       var os = overStayInfo(pk.network, state.dates.in, state.dates.out);
       state.trips.push({ id:Date.now(), parkId:pk.id, dateIn:state.dates.in, dateOut:state.dates.out, network:pk.network, overStay: os || false });
       persist();
+      track("booking_saved");
       state.tab="trips"; state.selected=null; render();
     }
     else if (act==="auth-submit"){ authPassword(); }
     else if (act==="auth-toggle-mode"){ authToggleMode(); }
+    else if (act==="auth-open"){ openAuth(arg==="login" ? "login" : "signup", false); }
+    else if (act==="auth-close"){ state.authOpen = false; state.pendingReminders = false; state.account.error = ""; render(); }
     else if (act==="auth-subscribe"){ authSubscribe(arg); }
     else if (act==="invite-dismiss"){ state.inviteMsg = null; render(); }
     else if (act==="manage-sub"){ openBillingPortal(); }
@@ -5642,7 +5685,7 @@
     if (t.hasAttribute("data-mem-date")){ state.membership.purchaseDate=t.value; persist(); return; }
     if (t.hasAttribute("data-stay-park") && state.stayForm){ var sid=parseInt(t.value,10); var sp=sid?parkById(sid):null; state.stayForm.parkId=sp?sp.id:null; state.stayForm.parkName=sp?sp.name:""; state.stayForm.network=sp?sp.network:""; return; }
     if (t.hasAttribute("data-stay-date") && state.stayForm){ state.stayForm.dateIn=t.value; return; }
-    var wk=t.getAttribute("data-watch"); if (wk){ if(t.value) state.watch[wk]=t.value; else delete state.watch[wk]; persist(); render(); return; }
+    var wk=t.getAttribute("data-watch"); if (wk){ if(t.value){ state.watch[wk]=t.value; track("target_date_set"); } else delete state.watch[wk]; persist(); render(); return; }
     var d = t.getAttribute("data-date");
     if (d){ state.dates[d]=t.value; render(); return; }
     var bd = t.getAttribute("data-bdate");
@@ -5684,6 +5727,7 @@
   // beforeinstallprompt is never missed.
   window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); deferredInstall = e; maybeShowInstall(); });
   window.addEventListener("appinstalled", function(){ deferredInstall = null; state.installPrompt = false; markInstallDismissed(); render(); });
+  track("app_open");   // once per page load, after first render
   initAuth();   // restore any persisted Supabase session + reflect signed-in state (no-op if sb is null)
   var sp = document.getElementById("splash");
   if (sp){ sp.style.opacity="0"; setTimeout(function(){ if(sp.parentNode) sp.parentNode.removeChild(sp); }, 480); }

@@ -25,6 +25,13 @@ project, so old links still resolve; all new canonical/OG/share/sitemap URLs use
 Stripe redirect URLs in `api/*` still reference the old alias and were intentionally left untouched
 (payment code is out of scope for that directive); both aliases work.
 
+**Production domain update (2026-10-06, supersedes the 2026-07-10 flip above): `hitchpass.app` is the
+official address.** Jim owns it and the posts use it; `CANONICAL_ORIGIN` in index.html and the
+canonical/og/JSON-LD URLs in landing.html, sitemap.xml and robots.txt now point at it. Both
+`hitchpass.vercel.app` and `hitch-pass-app.vercel.app` stay live and serve the app with NO redirects:
+trips and cards live in localStorage (`hitchpass.v1`), which is per address, so a redirect would hide an
+existing user's data. Do not add redirects or edit vercel.json for this.
+
 ## Product facts
 
 - Name is **Hitch Pass** (two words). "TrailHopper" is only the Asana project name — never
@@ -33,11 +40,12 @@ Stripe redirect URLs in `api/*` still reference the old alias and were intention
   (`650`).
 - Support email: supporthitchpass@gmail.com. Production: `hitchpass.vercel.app`
   (auto-deploys from `main` via Vercel; `hitch-pass-app.vercel.app` is a live legacy alias).
+  As of 2026-10-06 the official address is `hitchpass.app`; both vercel.app addresses still serve the app.
   Never treat a preview URL as production.
 
 ## Architecture
 
-- Single self-contained `index.html`, vanilla JS, six-tab navigation, no build step. Client
+- Single self-contained `index.html`, vanilla JS, seven-tab navigation (Home, Explore, Trips, Refer, Share, Profile, Perks), no build step. Client
   persistence: localStorage key `hitchpass.v1`.
 - Vercel serverless functions in `api/`: `create-checkout.js` (starts Stripe Checkout),
   `confirm-checkout.js` (server-verifies the session on return, reconciles Stripe→Supabase
@@ -51,11 +59,13 @@ Stripe redirect URLs in `api/*` still reference the old alias and were intention
   `updated_at`). Client computes `isPro`/entitlement from the subscriptions row, re-checked on
   focus and via realtime.
 - Stripe. Serverless functions handle checkout + webhooks.
-- Service worker versioned (`hitchpass-v20` as of July 10, 2026; version lives in `sw.js`, not
+- Service worker versioned (`hitchpass-v25` as of October 6, 2026; version lives in `sw.js`, not
   index.html) — BUMP the cache version on any
   cache-relevant change or users get stale builds.
-- Full-screen login front door (replaced the legacy "hitch" passcode gate) → Free/Pro
-  plan-choice screen → app.
+- Open front door (2026-10-06): the app opens straight to Home with no sign in. The email+password login
+  screen (`frontDoorView`) opens only when a signed-out user taps Create account / Sign in in Profile, turns
+  on reminders, or arrives via `?invite=CODE`. The Free/Pro plan-choice screen is off (`FEATURES.SHOW_PLAN_CHOICE`
+  false). (Replaced the full-screen login wall, which had replaced the legacy "hitch" passcode gate.)
 
 ## Product direction (updated 2026-07-07, supersedes 2026-06-29)
 
@@ -75,6 +85,37 @@ available to all users for free.
   onboarding; leave as-is for now (future directive may remove it).
 - **Growth channels:** organic Facebook posting, Reddit, SEO landing page, in-app share
   mechanic. Paid ads may follow once AdSense revenue offsets cost.
+
+## Design file (2026-10-06)
+
+Rev 2, agreed by Jim 2026-10-06. Card 1 of 3 (foundations + front door) implements the parts below; card 2
+does the new Home and the look; card 3 is repository visibility.
+
+- **Purpose:** Hitch Pass tells a Thousand Trails member the day a park opens for booking, takes the member
+  to that park's page, and keeps the booking and the stay clock after the member books.
+- **User:** Jim: a full time RVer and Thousand Trails member, on an iPhone.
+- **Two jobs come first:** booking and tracking.
+- **Seven tabs, names and order fixed:** Home, Explore, Trips, Refer, Share, Profile, Perks.
+- **Measurement (Google Analytics 4 only, tag G-QFYJEMS67E; no second count).** Existing events: `sign_up`,
+  `begin_checkout`, `purchase`, `invite_claim`. Added 2026-10-06: `app_open` (once per page load, after first
+  render), `park_saved`, `target_date_set`, `book_handoff` (param `network`), `booking_saved`, `reminder_on`,
+  `share_sent`, `tip_started`. Event name plus non-personal parameters only: no email, no name, no user id.
+  Use the `track(name, params)` helper (safe when gtag is blocked); every entry point to an action uses the
+  same event name.
+- **Front door rule:** the app opens with no sign in. An account is requested only when the user turns on
+  reminders (the one feature that needs a server). Everything driven by localStorage works signed out. The
+  `?invite=CODE` flow keeps its sign-in requirement. Existing signed-in users see no change.
+- **One prompt per visit:** the tip prompt (7-day wait for a new device, then 14 days between) and the share
+  prompt (7 days between) keep their timing; no more than one of them shows per page load. The 7-day new-device
+  grace is anchored to the first app open on the device (`hitchpass.firstSeen`, stamped at boot); a device
+  that already holds `hitchpass.v1` data and has no stamp counts as past the grace.
+- **One "unofficial" line per screen, at the bottom** (the `.footer` strip). The top ribbon was removed.
+- **Payment code is switched off in the interface and never deleted.** The existing flags already do this, so
+  no `FEATURES.SHOW_PAID_TIER` was added: `FEATURES.ENABLE_STRIPE_CHECKOUT` (false: no upgrade/subscribe UI,
+  `isPro()` true for everyone) and `FEATURES.SHOW_PLAN_CHOICE` (false: no plan-choice screen). A user with an
+  active `subscriptions` row still sees the ACTIVE badge and Manage / cancel subscription in Profile.
+- **The 11 active subscription accounts are untouched.** No row, schema or policy change.
+- landing.html no longer names Boondockers Welcome (the app holds no Boondockers parks).
 
 ## Known bugs / open work
 
@@ -144,6 +185,9 @@ The Transfer Packet (lives in the HitchPass Drive folder; the artifact a buyer's
 - Admin guide: user management, subscription states, webhook behavior, known issues.
 - Transfer-debt log: anything founder-dependent, with remediation notes.
 
+Dated note (2026-10-06): Jim's rulings of 2026-10-06 put the look in scope for this revision (card 2 of the
+design-file rerun). Measurement lands first (card 1), so the evidence of use still comes before the surface.
+
 Acceptance test: a competent IT generalist with no prior context can deploy from scratch and
 answer "what breaks if X goes down" from the packet alone.
 
@@ -207,10 +251,13 @@ Rules per round:
 - Webhook logic changes must address or explicitly preserve-and-note the known race
   (`customer.subscription.created` overwriting `active` with `incomplete`).
 - State WHICH URL the report's claims were verified against. Production is
-  `hitchpass.vercel.app` (legacy alias `hitch-pass-app.vercel.app` still resolves); a preview
+  `hitchpass.app` (official since 2026-10-06; `hitchpass.vercel.app` and legacy alias
+  `hitch-pass-app.vercel.app` still resolve and serve the app); a preview
   deploy is not production and must be labeled.
 
 ## Jim's standing 2-minute smoke script (use as the manual test baseline)
-Hard-refresh production → login → walk all six tabs → add a membership card → reload →
-confirm persistence matches the account's tier → tap upgrade and confirm it reaches Stripe
-checkout (do not complete payment). Any step failing = session not done.
+Hard-refresh production (`hitchpass.app`) → confirm Home opens with no login → walk all seven tabs → add a
+membership card → reload → confirm persistence (signed out, on-device) → Profile: Create account / Sign in
+buttons present. (Updated 2026-10-06: login is no longer the first step. The "tap upgrade and reach Stripe
+checkout" step is removed while `FEATURES.ENABLE_STRIPE_CHECKOUT` is false; restore it if the flag is
+re-enabled.) Any step failing = session not done.
