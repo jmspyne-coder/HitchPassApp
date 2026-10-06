@@ -1,0 +1,241 @@
+DIRECTIVE 2026-10-06-hitchpass-foundations-front-door
+Session report · 2026-10-06 · report_id 2026-10-06-hitchpass-foundations-front-door
+Launch dir: /Users/jim/Rootwork/HitchPassApp (pwd printed first; repo root of jmspyne-coder/HitchPassApp)
+Session model: Sonnet 5.5, effort high. Authorization: Jim, 2026-10-06 (card: "Directive equals approval").
+Card 1 of 3, Hitch Pass rerun, design file rev 2. Card 2 (DIRECTIVE 2026-10-06-hitchpass-home-handoff-look) NOT started.
+
+================================================================================
+OUTCOME: GREEN. 16 of 16 ledger rows green on production, with the labeled caveats
+in section 3 (rows 4 and 10). MERGED (PR #24, squash commit 43cc92c) AND DEPLOYED.
+================================================================================
+URL every claim was verified against: https://hitchpass.app (official, production) unless a
+row says otherwise. Rows 11, 13, 14 also name hitchpass.vercel.app and hitch-pass-app.vercel.app.
+Pre-merge local checks ran against http://127.0.0.1:8765 and are labeled LOCAL.
+
+Rollback anchor (main HEAD before the merge): e28f8ba30023b45e26c9379efc6a93229795b3c8
+Merge commit on main: 43cc92c (PR https://github.com/jmspyne-coder/HitchPassApp/pull/24)
+
+OPEN ITEM AT FILING: the docs commit holding this report + evidence (branch
+docs/2026-10-06-foundations-front-door-report, commit 8a733e6) is committed locally but NOT pushed/merged:
+the session guard hook blocked the push command (GIT_PUSH_MAIN false positive). Product PR #24 is merged and live.
+
+--------------------------------------------------------------------------------
+1. CHANGED FILES
+--------------------------------------------------------------------------------
+index.html   open front door (login screen only on request / ?invite=CODE); 8 GA events;
+             prompts no longer need sign-in + one prompt per page load; first-open stamp;
+             CANONICAL_ORIGIN -> https://hitchpass.app; top "Unofficial" ribbon and Home hero
+             tagline removed; signed-out Profile Account card; reminders control + iPhone line
+landing.html canonical, og:url, og:image, twitter:image, JSON-LD url -> hitchpass.app;
+             Boondockers Welcome removed (meta description and keywords)
+sitemap.xml  all <loc> -> hitchpass.app
+robots.txt   Sitemap line -> hitchpass.app
+sw.js        line 3 CACHE hitchpass-v24 -> hitchpass-v25
+CLAUDE.md    additive patch (production domain, seven tabs, front door, design-file section,
+             Transferability dated note, SW version line, validation-gate URL line, smoke script)
+design/screenshots/2026-10-06-foundations/   evidence (screenshots, ledger JSON, harness scripts)
+directives/reports/2026-10-06-hitchpass-foundations-front-door.txt   this report
+NOT touched: api/, vercel.json, Supabase, Stripe, parks data (diff vs main on api/ + vercel.json = 0 lines).
+
+--------------------------------------------------------------------------------
+2. STEP 0 INVENTORY (against base e28f8ba; line numbers are in that base)
+--------------------------------------------------------------------------------
+Tree clean, HEAD e28f8ba = origin/main (git fetch showed no newer commits; none touched
+index.html/landing.html/sw.js). The working branch 2026-10-06-hitchpass-foundations-front-door
+already existed at e28f8ba when the session opened (card says "create"; used as is).
+CLAUDE.md read in full. CLAUDE.md vs card conflicts resolved per card, patched in step 7:
+  "six-tab" -> seven tabs; production domain; SW line said v20 (real v24); smoke script; and the
+  Product-direction line "Plan-choice screen still shows on onboarding" is stale (flag already off).
+
+index.html (base):
+  CANONICAL_ORIGIN                       3230 (used by prodURL 3236, shareURL 3245)
+  "hitchpass.vercel.app" strings         3230, 5103 (webUpgradeNote ?upgrade=1 link, flag-gated, payment-adjacent: left)
+  "hitch-pass-app.vercel.app"            none in index.html or landing.html
+  gtag config                            lines 12-18 (async tag + gtag('config','G-QFYJEMS67E') => page_view)
+  track(name, params)                    4015 (try/catch, no-op safe)
+  existing track() calls                 invite_claim 4083, purchase 4173, begin_checkout 4218, sign_up 4266
+  FEATURES                               3137: SHOW_PLAN_CHOICE false, ENABLE_STRIPE_CHECKOUT false,
+                                         SHOW_DONATION_PROMPT true, SHOW_ADS false
+  front door / plan choice               frontDoorShell 5026, frontDoorView 5047, planChoiceView 5063;
+                                         render() gate 5453-5456 (login wall for every signed-out user)
+  signedIn() 5016 (callers: render 5454-5456, maybeShowShare 5191, maybeShowTip 5203, maybeShowInstall 5261)
+  hasChosenPlan() 4243 (returns true when SHOW_PLAN_CHOICE false; callers 5191, 5203, 5456)
+  tipDue 5165, shareDue 5178, maybeShowTip 5200, maybeShowShare 5189, pastPromptGrace 5157
+  grace clock: firstSeenAt() (key hitchpass.firstSeen) stamped lazily on the FIRST CHECK, which was only
+               reachable after sign-in (maybeShowTip was called only from refreshSubscription, which
+               needs a session). So the clock was anchored to first signed-in check, not first open.
+  unofficial lines (base)                splash .disc 76, Home hero 3422 ("Independent · unofficial wallet"),
+                                         frontDoorShell 5031, top ribbon 5468, bottom .footer 5470
+  reminders turn-on                      enablePush 4053 (needs push support + session), control 3854 only
+                                         when pushSupported() && !pushOn() (hidden on iPhone Safari tab),
+                                         handler 5602
+sw.js: CACHE line 3 = "hitchpass-v24"
+Paid tier already off before this card: ENABLE_STRIPE_CHECKOUT false makes isPro() true for everyone and
+removes every upgrade/subscribe surface; SHOW_PLAN_CHOICE false removes the plan screen.
+
+Step 0.4 (production, Playwright request client, before the merge):
+  https://hitchpass.app                 200, 559211 bytes, md5 e2d0ca133ad5573222351ab3b0f8f334, sw hitchpass-v24
+  https://hitchpass.vercel.app          200, 559211 bytes, md5 e2d0ca133ad5573222351ab3b0f8f334, sw hitchpass-v24
+  https://hitch-pass-app.vercel.app     200, 559211 bytes, md5 e2d0ca133ad5573222351ab3b0f8f334, sw hitchpass-v24
+  https://hitchpass.app/og-image.png    200 image/png
+  => hitchpass.app serves the same build; step 1 applied.
+
+PARK COUNT (step 4): the app's park data = 2740 parks (inline PARKS array: 2740 entries; parks.data.json:
+2740 entries, 2740 unique ids; by network tt 82, enc 72, dc 76, c2c 709, rpi 312, pa 1058, koa 431).
+landing.html states NO park count, so nothing needed correcting.
+
+--------------------------------------------------------------------------------
+3. FUNCTION LEDGER, PRODUCTION https://hitchpass.app (evidence: design/screenshots/2026-10-06-foundations/)
+Playwright 1.61.1, Chromium, 390x844, run after deploy (v25 live on all 3 addresses at 20:49:21Z).
+--------------------------------------------------------------------------------
+1  GREEN  Empty storage -> Home shows; nav Home/Explore/Trips/Refer/Share/Profile/Perks; no login, no plan
+          choice. row01-home.png
+2  GREEN  Signed out: favorited a park in Explore; localStorage favorites [1] before and after reload; filled
+          star shown. row02-favorite-after-reload.png
+3  GREEN  Signed out: added a booking in Trips; trips 1 before and after reload; dates shown.
+          row03-booking-after-reload.png
+4  GREEN* Signed out + one trip saved: tapped the reminders control -> create-account screen with the line
+          "Reminders need an account so we can send them to you." (row04b). Signed up
+          hitchpassqa+1791319771308@gmail.com through the app; app returned to Trips and auto-ran the
+          turn-on. *Push registration could not complete in headless Chromium: the request was attempted
+          (alert "Couldn't turn on alerts. Try again." = pushManager.subscribe failed; hp_push_on null; no
+          /api/push-register call). Allowed by the card. Row 10b below proves the success path with stubs.
+5  GREEN  Signed in from Profile (Sign in button) with that account; hitchpass.v1 byte-identical before and
+          after sign-in (favorites 2,5; trips 1). row05-profile-after-signin.png
+6  GREEN  Signed-out user, all seven tabs, text scan for upgrade|subscribe|go pro|choose your plan|$54|$4.50|
+          $6.50|Manage / cancel: none. One screenshot per tab: row06-tab-{home,explore,trips,refer,share,
+          profile,perks}.png. The signed-in no-subscription Profile (row05 screenshot) also shows none.
+          See note N1 about the extra signed-in walk I could not run.
+7  GREEN  Active-subscription branch: (a) diff proof: the signed-in branch of accountCard() is byte-identical
+          main vs this change (3939 bytes each, sha256 5edfe9ad67305be8 both; independent verifier extraction
+          also identical); (b) screenshot with entitlement forced in the browser only: the
+          /rest/v1/subscriptions read was intercepted to return [{"status":"active"}] (no database row
+          touched) -> ACTIVE badge and "Manage / cancel subscription" shown. row07-active-subscription-forced.png
+8  GREEN  Fresh device: no prompt on first visit; hitchpass.firstSeen stamped 1791319779007 at open.
+          row08-fresh-first-visit.png
+9  GREEN  Clocks set back 40 days (tip, share, grace all due): exactly one prompt (tip) shown; after dismissing,
+          walked all 7 tabs: no overlay on any (-,-,-,-,-,-,-). row09a/row09b.
+10 GREEN* Captured from production GA requests (google-analytics.com/g/collect): app_open, park_saved,
+          target_date_set, book_handoff, booking_saved, share_sent, tip_started all seen in a real run.
+          reminder_on seen in row 10b: signed-in turn-on with pushManager.subscribe and /api/push-register
+          stubbed IN THE BROWSER (so no server write), GA events seen: page_view, app_open, scroll,
+          reminder_on. *reminder_on is therefore proven with a stubbed push subscription, not real push.
+          (tip_started run stubbed /api/tip so no Stripe session was created.)
+11 GREEN  Page view request to GA on each address: hitchpass.app, hitchpass.vercel.app,
+          hitch-pass-app.vercel.app each sent page_view + app_open.
+12 GREEN  https://hitchpass.app/welcome source: canonical, og:url, og:image, twitter:image, JSON-LD url all
+          https://hitchpass.app/...; "Boondockers" absent; zero "vercel.app" strings.
+13 GREEN  Old install: profile seeded on hitchpass.vercel.app BEFORE the merge (old build, caches [v24],
+          hitchpass.v1 favorites [3], trip OLD-INSTALL-1). After deploy, same profile loaded
+          hitchpass.vercel.app: address bar still hitchpass.vercel.app, data intact (favorites [3], trip
+          OLD-INSTALL-1 shown). row13-before-deploy-old-build.png, row13-after-deploy-*.png,
+          old-install-seed.json, old-install-verify.json
+14 GREEN  sw.js serves hitchpass-v25 on all 3 addresses; the v24-cached client above ended with caches
+          [hitchpass-v25] only (seed record: [hitchpass-v24]) and loaded the new build with no login.
+          (My first verify run crashed on the tip prompt before it wrote its JSON; the recorded "after" is
+          from the immediate rerun on the same profile. Before-state is the seed record.)
+15 GREEN  google-analytics.com / googletagmanager.com / analytics.google.com aborted: Home loads, favorite
+          and booking persist across reload (rows 1-3 repeated), 0 errors mentioning track/gtag. The only
+          console error is the blocked request itself (net::ERR_FAILED). row15-ga-blocked.png
+16 GREEN  "unofficial" appears exactly once on each of the seven tabs (innerText count 1,1,1,1,1,1,1) and on
+          the login screen (bottom line). Splash (transient) unchanged.
+
+NOTES
+N1. Hook block: an extra check, a signed-in walk of all seven tabs, was blocked by the session guard hook
+    (ROOTWORK-GUARD-BLOCKED CREDENTIAL_READ: it matched "process.env" in my inline script text as a ".env"
+    path, a false positive). The hook says stop and tell Jim, so I did NOT work around it. Row 6 as written
+    (user with no active subscription, one screenshot per tab) is covered by the signed-out walk; the
+    signed-in Profile is covered by row 5. The other six tabs were not walked while signed in. If Jim wants
+    that leg, rerun with the harness in design/screenshots/2026-10-06-foundations/ (or fix the hook pattern).
+N2. LOCAL (http://127.0.0.1:8765, pre-merge) the same harness gave rows 1,2,3,4(no sign-up),6,8,9,15,16 GREEN
+    and row 10 with 7 of 8 events (reminder_on needs push). local/ledger-results-localhost.json.
+N3. Gate-time harness fixes (not product bugs): GA batches events into one request body, so the harness
+    parses every en= line; row 7's interception needed CORS headers and the service worker blocked in that
+    context (the SW was answering the request before the browser route saw it).
+
+--------------------------------------------------------------------------------
+4. VERIFICATION OUTPUT (pasted)
+--------------------------------------------------------------------------------
+JS SYNTAX GATE (3 inline scripts of index.html extracted without src=; sw.js):
+  inline script 0 OK
+  inline script 1 OK
+  inline script 2 OK
+  sw.js OK
+SERVICE WORKER BUMP GATE:
+  main: var CACHE = "hitchpass-v24";     this change: 3:var CACHE = "hitchpass-v25";
+  production: hitchpass.app 200 hitchpass-v25 | hitchpass.vercel.app 200 hitchpass-v25 | hitch-pass-app.vercel.app 200 hitchpass-v25
+LOCALSTORAGE KEY: 3125:  var KEY = "hitchpass.v1";   (unchanged; new key hitchpass.firstSeen already existed)
+SCOPE: git diff main --name-status -> M CLAUDE.md, M index.html, M landing.html, M robots.txt, M sitemap.xml, M sw.js
+       git diff main -- api vercel.json | wc -l -> 0
+MERGE GATES (all obtained before merging):
+  reviewer (fresh context): PASS C1-C10
+  security-reviewer: PASS (credentials clean, scope clean, no PII in events, invite requirement kept,
+                           entitlement for the 11 accounts untouched)
+  gate-verifier: PASS G1-G7 (G8 not verifiable by it, by design). The first dispatch returned FAIL only because
+                 my dispatch omitted the LAUNCH CONTEXT REPO / PR TARGET REPO lines; re-dispatched with
+                 jmspyne-coder/HitchPassApp for both and it passed.
+
+--------------------------------------------------------------------------------
+5. MANUAL TEST SCRIPT FOR JIM (iPhone, ~2 minutes)
+--------------------------------------------------------------------------------
+Use https://hitchpass.app. If your installed copy looks old, close it fully and reopen (it updates itself).
+1. Open hitchpass.app in Safari on a private tab. Expect Home immediately: no login, no plan screen.
+2. Tap each of the 7 tabs. Expect one grey "Unofficial · made by a customer, not the company" strip at the
+   bottom and no top banner on every tab. No Upgrade/Subscribe text anywhere.
+3. Explore -> tap a star -> kill the tab and reopen the same address (not private) -> star still there.
+4. Trips -> Add a booking -> pick a park, dates -> Save -> reload -> still listed. Note: on iPhone Safari
+   (not installed) the Trips screen shows "On iPhone, add Hitch Pass to your Home Screen first. Reminders
+   work only from there." above the reminders button.
+5. Profile -> Account card says an account is only needed for reminders, with Create account / Sign in.
+6. Add to Home Screen, open the icon, Trips -> Turn on reminders -> create account -> expect to land back
+   on Trips; if iOS didn't show the notification prompt, tap Turn on reminders once more.
+7. Your own old copy: because it already holds hitchpass.v1 data and had no first-open stamp, it may show
+   the tip prompt once on first load after this deploy (by the card's rule). Dismiss it; no other prompt
+   shows that visit.
+
+--------------------------------------------------------------------------------
+6. ASSUMPTIONS (ambiguity gate) and DESIGN FILE GAPS
+--------------------------------------------------------------------------------
+A1. Paid-tier switch: used the existing flags FEATURES.ENABLE_STRIPE_CHECKOUT (false) and
+    FEATURES.SHOW_PLAN_CHOICE (false); did NOT add FEATURES.SHOW_PAID_TIER because equivalents exist.
+    CLAUDE.md says so. (If Chat wants the literal name, it is a one-line alias.)
+A2. Home hero tagline "Independent · unofficial wallet" removed so each screen has exactly one unofficial
+    line (row 16). The top ribbon was the only thing the card named; the tagline was a second line.
+A3. Reminders control relabeled "Turn on reminders" (was "Get booking-window alerts") to match the card's
+    word; it also now shows on iPhone Safari (not installed) with the card's line, and tapping it there gives
+    the existing Home Screen instructions (no sign-up detour, since reminders cannot work there).
+A4. After sign-up from the reminders flow the app returns to Trips and completes the turn-on only if the tap
+    is still "active" (navigator.userActivation); otherwise it shows a toast asking for one more tap, because
+    notification permission needs a live tap.
+A5. ?invite=CODE arrivals open the login screen without a "Not now" button (that flow keeps its requirement).
+A6. Existing devices holding hitchpass.v1 with no firstSeen stamp get stamp "0" (past the grace), per card.
+DESIGN FILE GAPS (for Chat):
+G1. guides/*/index.html still carry canonical/og URLs on hitchpass.vercel.app (outside the approved files),
+    while sitemap.xml now lists hitchpass.app/guides/... (mismatch). GROWTH.md also still names
+    hitch-pass-app.vercel.app. index.html webUpgradeNote (flag-gated) still links hitchpass.vercel.app/?upgrade=1.
+G2. share_sent is instrumented on shareApp() (share sheet or copy link, both entry points). The Refer tab's
+    "Send referral text" is not counted; design file silent on whether it is a share.
+G3. booking_saved fires on edit as well as create (design file says "saved, by any path").
+G4. The in-app disclaimer is shorter now (trademark wording lives on landing.html only). Jim agreed one line;
+    flagging in case he wants the trademark notice in the bottom strip.
+G5. Reminders control only appears in Trips and only when at least one trip exists.
+G6. app_open fires before ?invite=CODE is stripped, so GA's page_location can include the invite code
+    (existing page_view already does).
+G7. Dead .ribbon CSS rule left in index.html (harmless).
+
+--------------------------------------------------------------------------------
+7. ROLLBACK
+--------------------------------------------------------------------------------
+Anchor: main e28f8ba. To undo the product change through a PR:
+  git checkout -b revert/2026-10-06-foundations origin/main
+  git revert -m 1 43cc92c   # (squash merge: use `git revert 43cc92c` if -m is rejected)
+  # then bump sw.js CACHE to hitchpass-v26 so clients update, commit, gh pr create, gh pr merge
+Vercel redeploys from main. Not needed: the ledger is green.
+
+--------------------------------------------------------------------------------
+8. CHAIN
+--------------------------------------------------------------------------------
+All 16 rows green: Notion board task set to Done. Successor is card 2,
+DIRECTIVE 2026-10-06-hitchpass-home-handoff-look; Chat files it after inspecting this report. Not started.
+Transfer Packet: the in-repo CLAUDE.md patch is the doc update for this card; the Drive packet itself was
+not edited (not in the approved list). Transfer debt: none new.
