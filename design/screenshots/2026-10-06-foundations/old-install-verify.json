@@ -1,0 +1,32 @@
+{
+  "first": {
+    "url": "https://hitchpass.vercel.app/",
+    "caches": [
+      "hitchpass-v25"
+    ],
+    "controllerAtLoad": true
+  },
+  "after": {
+    "url": "https://hitchpass.vercel.app/",
+    "caches": [
+      "hitchpass-v25"
+    ],
+    "servedSwCache": "hitchpass-v25"
+  },
+  "localStorageAfter": {
+    "favorites": [
+      3
+    ],
+    "trips": [
+      "OLD-INSTALL-1"
+    ]
+  },
+  "home": {
+    "nav": 12,
+    "login": false
+  },
+  "tripShowsSeeded": true,
+  "addressBarStillOld": true,
+  "promptOnOldInstall": "tip",
+  "firstSeenStamp": "0"
+}

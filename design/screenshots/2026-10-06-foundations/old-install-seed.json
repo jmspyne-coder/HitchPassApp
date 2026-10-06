@@ -1,0 +1,37 @@
+{
+  "origin": "https://hitchpass.vercel.app",
+  "servedSwCache": "hitchpass-v24",
+  "caches": [
+    "hitchpass-v24"
+  ],
+  "swController": true,
+  "seeded": {
+    "wallet": [
+      "tt",
+      "enc"
+    ],
+    "favorites": [
+      3
+    ],
+    "trips": [
+      {
+        "id": 111,
+        "parkId": 3,
+        "dateIn": "2027-07-01",
+        "dateOut": "2027-07-05",
+        "network": "tt",
+        "confirmation": "OLD-INSTALL-1",
+        "note": "seeded before deploy",
+        "booked": true,
+        "overStay": false
+      }
+    ],
+    "profile": {
+      "members": {},
+      "rigLength": null
+    },
+    "tier": "adventure",
+    "stays": [],
+    "watch": {}
+  }
+}

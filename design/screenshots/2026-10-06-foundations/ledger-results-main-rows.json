@@ -1,0 +1,61 @@
+{
+  "base": "https://hitchpass.app",
+  "at": "2026-10-06T20:50:14.164Z",
+  "results": [
+    {
+      "row": 1,
+      "status": "GREEN",
+      "evidence": "nav=Home/Explore/Trips/Refer/Share/Profile/Perks; loginText=false; planChoice=false; url=https://hitchpass.app/"
+    },
+    {
+      "row": 2,
+      "status": "GREEN",
+      "evidence": "favorites before reload=[1], after reload=[1], filled stars shown=1"
+    },
+    {
+      "row": 3,
+      "status": "GREEN",
+      "evidence": "picked park=\"Chestnut Lake Port Republic, NJ · TT\"; trips before reload=1, after=1; dates shown=true"
+    },
+    {
+      "row": 4,
+      "status": "GREEN",
+      "evidence": "control opened auth screen; text has reminders note=true; push-register/other calls=[]; signed up hitchpassqa+1791319771308@gmail.com; returned to Trips=true; hp_push_on=null; Notification.permission=denied; alerts=[\"Couldn’t turn on alerts. Try again.\"]; Turn-on control still shown=true (push registration did not complete in headless Chromium; request was attempted via afterSignIn->enablePush or toast prompt)"
+    },
+    {
+      "row": 6,
+      "status": "GREEN",
+      "evidence": "tabs checked=home,explore,trips,refer,share,profile,perks; tabs with upgrade/subscribe/plan text=[]"
+    },
+    {
+      "row": 16,
+      "status": "GREEN",
+      "evidence": "\"unofficial\" count per tab (innerText)={\"home\":1,\"explore\":1,\"trips\":1,\"refer\":1,\"share\":1,\"profile\":1,\"perks\":1}"
+    },
+    {
+      "row": 8,
+      "status": "GREEN",
+      "evidence": "prompt overlay open on first visit=false; firstSeen stamped=1791319779007"
+    },
+    {
+      "row": 9,
+      "status": "GREEN",
+      "evidence": "first prompt=tip; after dismissing, overlays while visiting 7 tabs=-,-,-,-,-,-,-"
+    },
+    {
+      "row": 10,
+      "status": "PARTIAL(reminder_on needs real push)",
+      "evidence": "GA requests captured by event name: [[\"app_open\",2],[\"park_saved\",1],[\"target_date_set\",1],[\"book_handoff\",1],[\"booking_saved\",1],[\"reminder_on\",0],[\"share_sent\",1],[\"tip_started\",1]]; all en values=[\"page_view\",\"app_open\",\"scroll\",\"park_saved\",\"book_handoff\",\"booking_saved\",\"target_date_set\",\"share_sent\",\"page_view\",\"app_open\",\"scroll\",\"tip_started\"]"
+    },
+    {
+      "row": 11,
+      "status": "INFO",
+      "evidence": "https://hitchpass.app: GA requests=2, en=[\"page_view\",\"app_open\"] | https://hitchpass.vercel.app: GA requests=2, en=[\"page_view\",\"app_open\"] | https://hitch-pass-app.vercel.app: GA requests=2, en=[\"page_view\",\"app_open\"]"
+    },
+    {
+      "row": 15,
+      "status": "GREEN",
+      "evidence": "GA blocked; home loaded=true; favorite persisted=1; trip persisted=1; errors mentioning track/gtag=[]; all page errors=[\"console:Failed to load resource: net::ERR_FAILED\"]"
+    }
+  ]
+}
